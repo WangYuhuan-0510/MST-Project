@@ -216,7 +216,45 @@ class PageTabBar(QWidget):
             btn.setChecked(i == idx)
         self.page_changed.emit(idx)
 
+class ExperimentInfoPanel(QFrame):
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setFixedHeight(120)  # 固定高度
+        self.setStyleSheet(f"""
+            QFrame {{
+                background: {PALETTE["bg_card"]};
+                border-top: 1px solid {PALETTE["border"]};
+            }}
+        """)
 
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(20, 12, 20, 12)
+        layout.setSpacing(24)
+
+        def item(title, value):
+            vbox = QVBoxLayout()
+            t = QLabel(title)
+            t.setStyleSheet(f"""
+                color: {PALETTE["text_muted"]};
+                font-size: 10px;
+                font-weight: 700;
+            """)
+            v = QLabel(value)
+            v.setStyleSheet(f"""
+                color: {PALETTE["text_primary"]};
+                font-size: 13px;
+                font-weight: 600;
+            """)
+            vbox.addWidget(t)
+            vbox.addWidget(v)
+            return vbox
+
+        layout.addLayout(item("Experiment", "Exp-002"))
+        layout.addLayout(item("Status", "Running"))
+        layout.addLayout(item("Operator", "Alice"))
+        layout.addLayout(item("Last Update", "2 min ago"))
+
+        layout.addStretch()
 # ─────────────────────────────────────────────
 #  Individual page content widgets
 # ─────────────────────────────────────────────
@@ -579,7 +617,11 @@ class ContentArea(QWidget):
         self.stack.addWidget(InstructionsPage())
         self.stack.addWidget(ResultsPage())
         self.stack.addWidget(DetailsPage())
-        vl.addWidget(self.stack, 1)
+        self.info_panel = ExperimentInfoPanel()
+
+        # 加入布局
+        vl.addWidget(self.stack, 1)     # 可伸缩
+        vl.addWidget(self.info_panel)   # 固定区域
 
         self.tab_bar.page_changed.connect(self.stack.setCurrentIndex)
 
