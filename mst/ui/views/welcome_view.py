@@ -2,9 +2,6 @@
 welcome_view.py
 ───────────────
 软件启动首界面。
-  · 新建实验  — 选择文件夹，创建 <name>.moc 文件
-  · 打开已有实验  — 选择已有 .moc 文件
-  · 最近文件列表  — 点击直接打开
 """
 from __future__ import annotations
 
@@ -18,21 +15,15 @@ from PySide6.QtGui import QPainter, QColor, QPen
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel,
     QPushButton, QFrame, QFileDialog, QSizePolicy,
-    QScrollArea, QSpacerItem,
 )
 
 from .ui_style import PALETTE
 
-# ── 最近文件记录存储键 ──────────────────────────────────────────────────────
-_ORG  = "SUAN-Lab"
-_APP  = "PW-MST"
-_KEY  = "recent_files"
-_MAX  = 10          # 最多保留条数
+_ORG = "SUAN-Lab"
+_APP = "PW-MST"
+_KEY = "recent_files"
+_MAX = 10
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  Recent-file helpers
-# ─────────────────────────────────────────────────────────────────────────────
 
 def _load_recent() -> list[str]:
     s = QSettings(_ORG, _APP)
@@ -41,17 +32,13 @@ def _load_recent() -> list[str]:
 
 
 def _save_recent(path: str) -> None:
-    s   = QSettings(_ORG, _APP)
+    s = QSettings(_ORG, _APP)
     lst = _load_recent()
     if path in lst:
         lst.remove(path)
     lst.insert(0, path)
     s.setValue(_KEY, lst[:_MAX])
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-#  Decorative background widget (螺旋线装饰，模仿截图右下角)
-# ─────────────────────────────────────────────────────────────────────────────
 
 class _BgDecor(QWidget):
     def __init__(self, parent=None):
@@ -62,26 +49,16 @@ class _BgDecor(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         w, h = self.width(), self.height()
-
         pen = QPen(QColor(PALETTE["border"]))
         pen.setWidth(2)
         p.setPen(pen)
         p.setBrush(Qt.NoBrush)
-
-        # 几条大弧线，模仿右下角装饰
         for r in range(120, 420, 60):
             p.drawArc(w - r, h - r, r * 2, r * 2, 90 * 16, 90 * 16)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Session button  (大型带图标操作按钮)
-# ─────────────────────────────────────────────────────────────────────────────
-
 class _SessionBtn(QPushButton):
-    """带左侧图标文字的大操作按钮，新建有边框高亮，打开无边框。"""
-
-    def __init__(self, icon_char: str, text: str,
-                 primary: bool = False, parent=None):
+    def __init__(self, icon_char: str, text: str, primary: bool = False, parent=None):
         super().__init__(parent)
         self.setFixedHeight(74)
         self.setMinimumWidth(340)
@@ -129,10 +106,6 @@ class _SessionBtn(QPushButton):
         """)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Recent file row
-# ─────────────────────────────────────────────────────────────────────────────
-
 class _RecentRow(QPushButton):
     def __init__(self, path: str, parent=None):
         super().__init__(parent)
@@ -142,17 +115,11 @@ class _RecentRow(QPushButton):
         self.setCursor(Qt.PointingHandCursor)
         self.setStyleSheet(f"""
             QPushButton {{
-                background: transparent;
-                border: none;
-                border-radius: 6px;
-                text-align: left;
+                background: transparent; border: none;
+                border-radius: 6px; text-align: left;
             }}
-            QPushButton:hover {{
-                background: {PALETTE['bg_hover']};
-            }}
-            QPushButton:pressed {{
-                background: {PALETTE['bg_active']};
-            }}
+            QPushButton:hover {{ background: {PALETTE['bg_hover']}; }}
+            QPushButton:pressed {{ background: {PALETTE['bg_active']}; }}
         """)
 
         lo = QHBoxLayout(self)
@@ -169,15 +136,13 @@ class _RecentRow(QPushButton):
 
         name_lbl = QLabel(f"<b>{p.stem}</b>")
         name_lbl.setStyleSheet(
-            f"color: {PALETTE['text_primary']}; font-size: 13px;"
-            " background: transparent;"
+            f"color: {PALETTE['text_primary']}; font-size: 13px; background: transparent;"
         )
         name_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
 
         path_lbl = QLabel(str(p.parent))
         path_lbl.setStyleSheet(
-            f"color: {PALETTE['text_muted']}; font-size: 11px;"
-            " background: transparent;"
+            f"color: {PALETTE['text_muted']}; font-size: 11px; background: transparent;"
         )
         path_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
 
@@ -189,8 +154,7 @@ class _RecentRow(QPushButton):
         date_lbl = QLabel(f"— {mtime}")
         date_lbl.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         date_lbl.setStyleSheet(
-            f"color: {PALETTE['text_muted']}; font-size: 11px;"
-            " background: transparent;"
+            f"color: {PALETTE['text_muted']}; font-size: 11px; background: transparent;"
         )
         date_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
 
@@ -198,26 +162,16 @@ class _RecentRow(QPushButton):
         lo.addWidget(date_lbl)
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  WelcomeView
-# ─────────────────────────────────────────────────────────────────────────────
-
 class WelcomeView(QWidget):
-    """
-    启动首界面。
-    发出 session_opened(path: str) 信号，由 MainWindow 接收并切换到 ProjectView。
-    """
-    session_opened = Signal(str)   # 携带 .moc 文件路径
+    session_opened = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setStyleSheet(f"background: {PALETTE['bg_main']};")
 
-        # 装饰背景（右下角弧线）
         self._decor = _BgDecor(self)
         self._decor.setAttribute(Qt.WA_TransparentForMouseEvents)
 
-        # ── 主布局：垂直居中 ────────────────────────────────────────────────
         outer = QVBoxLayout(self)
         outer.setContentsMargins(0, 0, 0, 0)
         outer.addStretch(2)
@@ -229,9 +183,8 @@ class WelcomeView(QWidget):
         center_lo.setContentsMargins(0, 0, 0, 0)
         center_lo.setSpacing(0)
 
-        # ── 按钮区 ──────────────────────────────────────────────────────────
-        self.btn_new    = _SessionBtn("📄", "Start New Session",   primary=False)
-        self.btn_open   = _SessionBtn("📂", "Browse Previous Sessions", primary=False)
+        self.btn_new  = _SessionBtn("📄", "新建实验",   primary=True)
+        self.btn_open = _SessionBtn("📂", "打开已有实验", primary=False)
         self.btn_new.clicked.connect(self._on_new)
         self.btn_open.clicked.connect(self._on_open)
 
@@ -240,8 +193,7 @@ class WelcomeView(QWidget):
         center_lo.addWidget(self.btn_open)
         center_lo.addSpacing(28)
 
-        # ── 最近文件 ────────────────────────────────────────────────────────
-        self._recent_header = QLabel("Recently Opened:")
+        self._recent_header = QLabel("最近打开：")
         self._recent_header.setStyleSheet(
             f"color: {PALETTE['text_muted']}; font-size: 12px; font-weight: 600;"
             " letter-spacing: 0.5px;"
@@ -257,7 +209,6 @@ class WelcomeView(QWidget):
         center_lo.addSpacing(8)
         center_lo.addWidget(self._recent_area)
 
-        # 水平居中
         h_wrap = QHBoxLayout()
         h_wrap.addStretch()
         h_wrap.addWidget(center)
@@ -268,16 +219,11 @@ class WelcomeView(QWidget):
 
         self._populate_recent()
 
-    # ── 布局重绘时同步装饰层大小 ─────────────────────────────────────────────
-
     def resizeEvent(self, e):
         super().resizeEvent(e)
         self._decor.setGeometry(0, 0, self.width(), self.height())
 
-    # ── 填充最近文件 ─────────────────────────────────────────────────────────
-
     def _populate_recent(self):
-        # 清空旧条目
         while self._recent_lo.count():
             item = self._recent_lo.takeAt(0)
             if item.widget():
@@ -285,10 +231,8 @@ class WelcomeView(QWidget):
 
         recent = _load_recent()
         if not recent:
-            no_lbl = QLabel("No recent files")
-            no_lbl.setStyleSheet(
-                f"color: {PALETTE['text_muted']}; font-size: 12px;"
-            )
+            no_lbl = QLabel("暂无最近文件")
+            no_lbl.setStyleSheet(f"color: {PALETTE['text_muted']}; font-size: 12px;")
             self._recent_lo.addWidget(no_lbl)
             self._recent_header.hide()
             return
@@ -296,47 +240,74 @@ class WelcomeView(QWidget):
         self._recent_header.show()
         for path in recent:
             row = _RecentRow(path)
-            row.clicked.connect(lambda _, p=path: self._open_path(p))
+            row.clicked.connect(lambda _, p=path: self._navigate(p))
             self._recent_lo.addWidget(row)
 
-    # ── 槽函数 ───────────────────────────────────────────────────────────────
-
     def _on_new(self):
-        """Select a folder, create a <folder name>.moc file in it."""
-        folder = QFileDialog.getExistingDirectory(
-            self, "Select a folder to store the experiment", str(Path.home())
-        )
-        if not folder:
+        self.setEnabled(False)
+
+        # 关键：DontUseNativeDialog 强制使用 Qt 自实现的对话框，
+        # 完全绕开 Windows 原生窗口消息（WM_ACTIVATE / WM_SETFOCUS），
+        # 对话框关闭后不会向主窗口注入额外系统事件，setCurrentIndex 立即生效。
+        dlg = QFileDialog(self, "新建实验文件",
+                          str(Path.home() / "新建实验.moc"),
+                          "MST 实验文件 (*.moc);;所有文件 (*)")
+        dlg.setAcceptMode(QFileDialog.AcceptSave)
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+        dlg.setDefaultSuffix("moc")
+
+        if dlg.exec() != QFileDialog.Accepted:
+            self.setEnabled(True)
             return
-        folder_path = Path(folder)
-        # 文件名取文件夹名，避免重名则追加序号
-        base = folder_path.name or "experiment"
-        moc_path = folder_path / f"{base}.moc"
-        counter = 1
-        while moc_path.exists():
-            moc_path = folder_path / f"{base}_{counter}.moc"
-            counter += 1
-        # 写入初始 JSON 结构
+
+        files = dlg.selectedFiles()
+        if not files:
+            self.setEnabled(True)
+            return
+
+        path = files[0]
+        self.setEnabled(True)
+
+        moc_path = Path(path)
+        if moc_path.suffix.lower() != ".moc":
+            moc_path = moc_path.with_suffix(".moc")
+
         moc_path.write_text(
             json.dumps({
                 "version": "1.0",
                 "created": datetime.now().isoformat(),
-                "name": base,
+                "name": moc_path.stem,
             }, ensure_ascii=False, indent=2),
             encoding="utf-8",
         )
-        self._open_path(str(moc_path))
+        _save_recent(str(moc_path))
+        self._populate_recent()
+        # Qt 非原生对话框关闭后无残留系统消息，直接 emit 即可
+        self.session_opened.emit(str(moc_path))
 
     def _on_open(self):
-        """Select an existing .moc file."""
-        path, _ = QFileDialog.getOpenFileName(
-            self, "Select an experiment file", str(Path.home()),
-            "PW-MST experiment files (*.moc);;All files (*)"
-        )
-        if path:
-            self._open_path(path)
+        self.setEnabled(False)
 
-    def _open_path(self, path: str):
+        dlg = QFileDialog(self, "打开实验文件",
+                          str(Path.home()),
+                          "MST 实验文件 (*.moc);;所有文件 (*)")
+        dlg.setAcceptMode(QFileDialog.AcceptOpen)
+        dlg.setOption(QFileDialog.DontUseNativeDialog, True)
+
+        if dlg.exec() != QFileDialog.Accepted:
+            self.setEnabled(True)
+            return
+
+        files = dlg.selectedFiles()
+        self.setEnabled(True)
+        if files:
+            path = files[0]
+            _save_recent(path)
+            self._populate_recent()
+            self.session_opened.emit(path)
+
+    def _navigate(self, path: str):
+        """点击最近文件直接跳转（无对话框，不需要延迟）。"""
         _save_recent(path)
         self._populate_recent()
         self.session_opened.emit(path)
