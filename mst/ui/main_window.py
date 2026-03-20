@@ -1,60 +1,59 @@
-from PySide6.QtWidgets import QMainWindow, QStackedWidget, QToolBar
-from PySide6.QtGui import QAction
+"""
+main_window.py
+──────────────
+应用程序主窗口。
+导航由 ProjectView 内置的侧边栏 + 标签页完整处理，
+MainWindow 只负责窗口初始化和全局状态注入。
+"""
+from __future__ import annotations
+
+from PySide6.QtWidgets import QMainWindow
 
 from mst.core.app_state import AppState
-
 from .views.project_view import ProjectView
-from .views.experiment_setup_view import ExperimentSetupView
-from .views.run_view import RunView
-from .views.analysis_view import AnalysisView
 
 
 class MainWindow(QMainWindow):
     """
-    应用程序主窗口，负责页面切换和全局菜单/工具栏。
+    应用程序主窗口。
+
+    页面结构完全由 ProjectView 管理：
+      侧边栏  — 实验列表 / 保存 / 关闭 / 新建实验
+      标签页  — Plan (ExperimentSetupView)
+              / Instructions
+              / Results (RunView)
+              / Details (AnalysisView)
     """
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("MST 实验控制平台")
+        self.setWindowTitle("PW-MST 实验控制平台")
         self.resize(1200, 800)
 
+        # ── 全局应用状态，供各 View 通过 self.window().state 访问 ──
         self.state = AppState()
 
-        self._stack = QStackedWidget(self)
-        self.setCentralWidget(self._stack)
-
-        self._init_views()
-        self._init_toolbar()
-
-    def _init_views(self) -> None:
+        # ── ProjectView 作为唯一中心 widget ──────────────────────────
         self.project_view = ProjectView(self)
-        self.experiment_view = ExperimentSetupView(self)
-        self.run_view = RunView(self)
-        self.analysis_view = AnalysisView(self)
+        self.setCentralWidget(self.project_view)
 
-        self._stack.addWidget(self.project_view)
-        self._stack.addWidget(self.experiment_view)
-        self._stack.addWidget(self.run_view)
-        self._stack.addWidget(self.analysis_view)
+        # ── 将侧边栏的 Save / Close / New 信号接入主窗口逻辑 ─────────
+        self.project_view.sidebar.save_btn.clicked.connect(self._on_save)
+        self.project_view.sidebar.close_btn.clicked.connect(self._on_close)
+        self.project_view.sidebar.new_btn.clicked.connect(self._on_new_experiment)
 
-    def _init_toolbar(self) -> None:
-        toolbar = QToolBar("导航", self)
-        self.addToolBar(toolbar)
+    # ── Slots ─────────────────────────────────────────────────────────────
 
-        act_project = QAction("项目", self)
-        act_project.triggered.connect(lambda: self._stack.setCurrentWidget(self.project_view))
-        toolbar.addAction(act_project)
+    def _on_save(self) -> None:
+        """保存当前实验状态（占位，接入持久化层后实现）。"""
+        print("[MainWindow] Save triggered")
 
-        act_exp = QAction("实验设置", self)
-        act_exp.triggered.connect(lambda: self._stack.setCurrentWidget(self.experiment_view))
-        toolbar.addAction(act_exp)
+    def _on_close(self) -> None:
+        """关闭当前实验并返回空白状态（占位）。"""
+        print("[MainWindow] Close triggered")
 
-        act_run = QAction("运行", self)
-        act_run.triggered.connect(lambda: self._stack.setCurrentWidget(self.run_view))
-        toolbar.addAction(act_run)
-
-        act_analysis = QAction("分析", self)
-        act_analysis.triggered.connect(lambda: self._stack.setCurrentWidget(self.analysis_view))
-        toolbar.addAction(act_analysis)
-
+    def _on_new_experiment(self) -> None:
+        """新建实验：重置 state 并跳转到 Plan 页（占位）。"""
+        print("[MainWindow] New experiment triggered")
+        # 切换到 Plan 标签页（索引 0）
+        self.project_view.content.stack.setCurrentIndex(0)
