@@ -14,14 +14,17 @@ class DoseResponsePlot(QWidget):
     def __init__(self, parent=None, *, enable_zoom: bool = False) -> None:
         super().__init__(parent)
         self._enable_zoom = bool(enable_zoom)
-        self._fig = Figure(figsize=(4, 3), tight_layout=True)
+        self._fig = Figure(figsize=(4, 3), dpi=100, tight_layout=False)
         self._canvas = FigureCanvas(self._fig)
         self._ax = self._fig.add_subplot(111)
         self._ax.set_title("Dose Response")
         self._ax.set_xlabel("Concentration")
-        self._ax.set_ylabel("Feature @ T1")
+        self._ax.set_ylabel("Fnorm [‰]")
         self._ax.grid(True, alpha=0.25)
         self._ax.set_xscale("log")
+        
+        # 手动设置subplots_adjust以替代tight_layout，避免动态收缩
+        self._fig.subplots_adjust(left=0.12, right=0.95, top=0.92, bottom=0.12)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -30,6 +33,9 @@ class DoseResponsePlot(QWidget):
 
             layout.addWidget(NavigationToolbar(self._canvas, self))
         layout.addWidget(self._canvas)
+        
+        # 设置canvas的最小尺寸以防止收缩
+        self._canvas.setMinimumSize(300, 200)
 
         self._x: List[float] = []
         self._y: List[float] = []
@@ -52,7 +58,7 @@ class DoseResponsePlot(QWidget):
         self._ax.clear()
         self._ax.set_title("Dose Response")
         self._ax.set_xlabel("Concentration")
-        self._ax.set_ylabel("Feature @ T1")
+        self._ax.set_ylabel("Fnorm [‰]")
         self._ax.grid(True, alpha=0.25)
         self._ax.set_xscale("log")
 

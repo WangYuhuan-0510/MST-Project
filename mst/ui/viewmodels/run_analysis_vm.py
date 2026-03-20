@@ -82,10 +82,13 @@ class RunAnalysisViewModel(QObject):
         self.enabled_mask = [True] * self.n_capillaries
         self.selected_capillary = 0
 
-        # Scan：用一个简单的“中心荧光”分布模拟
+        # Scan：沿扫描方向多峰类高斯包络 + 漂移/噪声（与 mock_device.simulate_mst_time_fluorescence 一致）
         base = 800.0
         drift = np.linspace(-40, 40, self.n_capillaries)
-        self.scan_center = (base + drift + np.random.normal(0, 8, self.n_capillaries)).tolist()
+        i = np.arange(self.n_capillaries, dtype=float)
+        denom = max(self.n_capillaries - 1, 1)
+        peaks = 35.0 * np.sin((i / denom) * np.pi * 4.0) ** 2
+        self.scan_center = (base + drift + peaks + np.random.normal(0, 8, self.n_capillaries)).tolist()
 
         # Trace：清空
         self.t = []

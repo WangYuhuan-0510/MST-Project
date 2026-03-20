@@ -76,10 +76,13 @@ def simulate_mst_time_fluorescence(
     t = np.arange(t_start_s, t_end_s + 1e-12, dt_s, dtype=float)
     concentrations = np.logspace(-2, 1, n_capillaries).astype(float)
 
-    # 模拟 scan center
+    # 模拟 scan center：沿扫描方向多段类高斯峰（探测器移动连续采样），连线作 capillary scan 曲线
     base = 800.0
     drift = np.linspace(-40, 40, n_capillaries)
-    scan_center = (base + drift + np.random.normal(0.0, 8.0, n_capillaries)).astype(float)
+    i = np.arange(n_capillaries, dtype=float)
+    denom = max(n_capillaries - 1, 1)
+    peaks = 35.0 * np.sin((i / denom) * np.pi * 4.0) ** 2
+    scan_center = (base + drift + peaks + np.random.normal(0.0, 8.0, n_capillaries)).astype(float)
 
     # 4PL 生成 binding 程度，再映射到 trace 幅度
     x_safe = np.maximum(concentrations, 1e-12)

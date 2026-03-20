@@ -33,8 +33,13 @@ class RunView(QWidget):
 
         root = QVBoxLayout(self)
 
+        # ===== 顶部整体区域（全部内容）=====
+        top_layout = QVBoxLayout()
+        root.addLayout(top_layout)
+
+        # ===== 1️⃣ 控制栏 =====
         controls = QHBoxLayout()
-        root.addLayout(controls)
+        top_layout.addLayout(controls)
 
         self.btn_start = QPushButton("开始（模拟）", self)
         self.btn_start.clicked.connect(self.start)
@@ -65,8 +70,9 @@ class RunView(QWidget):
         self.lbl_status = QLabel("就绪", self)
         controls.addWidget(self.lbl_status)
 
+        # ===== 2️⃣ 三张图 =====
         plots = QHBoxLayout()
-        root.addLayout(plots, 1)
+        top_layout.addLayout(plots)
 
         box_scan = QGroupBox("Capillary Scan", self)
         box_scan.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
@@ -95,17 +101,26 @@ class RunView(QWidget):
         layout_dose.addWidget(self.plot_dose)
         plots.addWidget(box_dose, 1)
 
+        # ===== 3️⃣ Review 按钮（也放顶部）=====
+        actions = QHBoxLayout()
+        top_layout.addLayout(actions)
+
+        actions.addStretch(1)
+
+        self.btn_review = QPushButton("Review", self)
+        self.btn_review.clicked.connect(self._open_review)
+        actions.addWidget(self.btn_review)
+
+        actions.addStretch(1)
+
+        # ===== ⭐ 关键：下面留空 =====
+        root.addStretch(1)
+    
         self.vm.changed.connect(self._render)
         self.vm.selected_capillary_changed.connect(self._sync_selected_ui)
         self.vm.t1_changed.connect(self._sync_t1_ui)
-        self._render()
 
-        actions_bottom = QHBoxLayout()
-        root.addLayout(actions_bottom)
-        actions_bottom.addStretch(1)
-        self.btn_review = QPushButton("Review", self)
-        self.btn_review.clicked.connect(self._open_review)
-        actions_bottom.addWidget(self.btn_review)
+        self._render()  # 初始化显示
 
     def _mw(self):
         return self.window()
