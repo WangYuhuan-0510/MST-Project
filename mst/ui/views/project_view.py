@@ -338,61 +338,72 @@ class Sidebar(QWidget):
 # ─────────────────────────────────────────────
 #  Bottom Data Panel  (固定，不随页面切换变化)
 # ─────────────────────────────────────────────
-class _MetricCard(QFrame):
-    """单个指标卡：标题 + 数值 + 可选单位标签。"""
-    def __init__(self, title: str, value: str = "—", unit: str = "", parent=None):
+
+def _vsep() -> QFrame:
+    f = QFrame()
+    f.setFrameShape(QFrame.VLine)
+    f.setFixedWidth(1)
+    f.setStyleSheet(f"background: {PALETTE['border']}; border: none;")
+    return f
+
+
+class _InfoBlock(QWidget):
+    """
+    单个信息块：图标 + 小标题（灰）+ 粗体数值，无边框。
+    参照截图中的横排展示风格。
+    """
+    def __init__(self, icon: str, label: str, value: str = "—",
+                 min_w: int = 140, parent=None):
         super().__init__(parent)
-        self.setStyleSheet(
-            f"background: {PALETTE['bg_card']};"
-            f"border: 1px solid {PALETTE['border']};"
-            "border-radius: 8px;"
-        )
-        vl = QVBoxLayout(self)
-        vl.setContentsMargins(14, 10, 14, 10)
-        vl.setSpacing(2)
+        self.setMinimumWidth(min_w)
+        self.setStyleSheet("background: transparent;")
 
-        self._title_lbl = QLabel(title)
-        self._title_lbl.setStyleSheet(
-            f"color: {PALETTE['text_muted']}; font-size: 10px;"
-            " font-weight: 700; letter-spacing: 0.8px;"
+        lo = QHBoxLayout(self)
+        lo.setContentsMargins(12, 0, 12, 0)
+        lo.setSpacing(10)
+
+        icon_lbl = QLabel(icon)
+        icon_lbl.setStyleSheet(
+            f"color: {PALETTE['text_muted']}; font-size: 18px;"
+        )
+        icon_lbl.setFixedWidth(22)
+        icon_lbl.setAlignment(Qt.AlignCenter)
+
+        text_blk = QVBoxLayout()
+        text_blk.setSpacing(1)
+
+        self._label_lbl = QLabel(label)
+        self._label_lbl.setStyleSheet(
+            f"color: {PALETTE['text_muted']}; font-size: 10px; font-weight: 500;"
+            " letter-spacing: 0.3px;"
         )
 
-        val_row = QHBoxLayout()
-        val_row.setSpacing(4)
-        self._val_lbl = QLabel(value)
-        self._val_lbl.setStyleSheet(
-            f"color: {PALETTE['text_primary']}; font-size: 18px; font-weight: 700;"
+        self._value_lbl = QLabel(value)
+        self._value_lbl.setStyleSheet(
+            f"color: {PALETTE['text_primary']}; font-size: 14px; font-weight: 700;"
         )
-        self._unit_lbl = QLabel(unit)
-        self._unit_lbl.setStyleSheet(
-            f"color: {PALETTE['text_muted']}; font-size: 11px; font-weight: 500;"
-        )
-        self._unit_lbl.setAlignment(Qt.AlignBottom)
-        val_row.addWidget(self._val_lbl)
-        val_row.addWidget(self._unit_lbl)
-        val_row.addStretch()
 
-        vl.addWidget(self._title_lbl)
-        vl.addLayout(val_row)
+        text_blk.addWidget(self._label_lbl)
+        text_blk.addWidget(self._value_lbl)
 
-    def set_value(self, value: str, color_key: str = "text_primary") -> None:
-        self._val_lbl.setText(value)
-        self._val_lbl.setStyleSheet(
-            f"color: {PALETTE[color_key]}; font-size: 18px; font-weight: 700;"
-        )
+        lo.addWidget(icon_lbl)
+        lo.addLayout(text_blk)
+
+    def set_value(self, value: str) -> None:
+        self._value_lbl.setText(value)
+
+    def set_label(self, label: str) -> None:
+        self._label_lbl.setText(label)
 
 
 class DataPanel(QFrame):
     """
     底部固定数据面板。
-    直接挂在 ContentArea 布局末尾，不属于任何标签页，
-    页面切换时完全不受影响。
-
-    通过 update_from_state(state) 刷新显示；
-    也可在外部直接调用各 set_* 方法单独更新。
+    显示：分析物种类+浓度 / 配体种类+最高浓度 / 缓冲液+毛细管 / 激发光+MST功率。
+    不属于任何标签页，页面切换时完全不受影响。
+    每秒自动从 ExperimentSetupView.get_params() 读取最新参数。
     """
-
-    PANEL_H = 110   # 面板固定高度（px）
+    PANEL_H = 72
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -403,153 +414,83 @@ class DataPanel(QFrame):
         )
 
         root = QHBoxLayout(self)
-        root.setContentsMargins(20, 12, 20, 12)
-        root.setSpacing(12)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        # ── 左侧：实验标识 ──────────────────────────────────────────
-        id_block = QVBoxLayout()
-        id_block.setSpacing(3)
+        # ── 四个信息块，用竖分隔线隔开 ──────────────────────────────
+        self._blk_target  = _InfoBlock("◕", "分析物",  "—",  160)
+        self._blk_ligand  = _InfoBlock("◆", "配体",    "—",  160)
+        self._blk_buf     = _InfoBlock("⬛", "缓冲液",  "—",  200)
+        self._blk_cap     = _InfoBlock("▮", "毛细管",   "—",  180)
+        self._blk_excit   = _InfoBlock("☀", "激发光功率", "—", 160)
+        self._blk_mst     = _InfoBlock("✳", "MST 功率",  "—", 140)
 
-        self._exp_name = QLabel("— 未选择实验 —")
-        self._exp_name.setStyleSheet(
-            f"color: {PALETTE['text_primary']}; font-size: 14px; font-weight: 700;"
-        )
-        self._exp_id = QLabel("ID: —")
-        self._exp_id.setStyleSheet(
-            f"color: {PALETTE['text_muted']}; font-size: 11px;"
-        )
-        self._exp_status = QLabel("●  —")
-        self._exp_status.setStyleSheet(
-            f"color: {PALETTE['text_muted']}; font-size: 11px; font-weight: 600;"
-        )
-        id_block.addWidget(self._exp_name)
-        id_block.addWidget(self._exp_id)
-        id_block.addWidget(self._exp_status)
-        id_block.addStretch()
+        for blk in [self._blk_target, self._blk_ligand,
+                    self._blk_buf, self._blk_cap,
+                    self._blk_excit, self._blk_mst]:
+            root.addWidget(blk, 1)
+            root.addWidget(_vsep())
 
-        root.addLayout(id_block)
+        # 移除最后一根多余的分隔线
+        item = root.itemAt(root.count() - 1)
+        if item and item.widget():
+            item.widget().hide()
 
-        # ── 竖分隔线 ───────────────────────────────────────────────
-        def _vsep():
-            f = QFrame()
-            f.setFrameShape(QFrame.VLine)
-            f.setFixedWidth(1)
-            f.setStyleSheet(f"background: {PALETTE['border']}; border: none;")
-            return f
-
-        root.addWidget(_vsep())
-
-        # ── 中间：指标卡网格（2行×4列）─────────────────────────────
-        grid_widget = QWidget()
-        grid_widget.setStyleSheet("background: transparent;")
-        grid = QGridLayout(grid_widget)
-        grid.setContentsMargins(0, 0, 0, 0)
-        grid.setSpacing(8)
-
-        self._card_kd      = _MetricCard("Kd (拟合)",    "—",  "µM")
-        self._card_r2      = _MetricCard("R²",           "—",  "")
-        self._card_points  = _MetricCard("数据点",       "—",  "pts")
-        self._card_rmax    = _MetricCard("Rmax",         "—",  "")
-        self._card_noise   = _MetricCard("噪声 σ",       "—",  "")
-        self._card_npts    = _MetricCard("采样设定",     "—",  "pts")
-        self._card_xmin    = _MetricCard("x_min",        "—",  "")
-        self._card_xmax    = _MetricCard("x_max",        "—",  "")
-
-        cards = [
-            self._card_kd,     self._card_r2,
-            self._card_points, self._card_rmax,
-            self._card_noise,  self._card_npts,
-            self._card_xmin,   self._card_xmax,
-        ]
-        for idx, card in enumerate(cards):
-            grid.addWidget(card, idx // 4, idx % 4)
-
-        root.addWidget(grid_widget, 1)
-
-        root.addWidget(_vsep())
-
-        # ── 右侧：时间戳 ────────────────────────────────────────────
-        ts_block = QVBoxLayout()
-        ts_block.setSpacing(4)
-
-        ts_header = QLabel("LAST UPDATED")
-        ts_header.setStyleSheet(
-            f"color: {PALETTE['text_muted']}; font-size: 9px;"
-            " font-weight: 700; letter-spacing: 1px;"
-        )
-        self._ts_lbl = QLabel("—")
-        self._ts_lbl.setStyleSheet(
-            f"color: {PALETTE['text_secondary']}; font-size: 12px;"
-        )
-        ts_block.addWidget(ts_header)
-        ts_block.addWidget(self._ts_lbl)
-        ts_block.addStretch()
-
-        root.addLayout(ts_block)
-
-        # ── 自动刷新计时器（每秒从主窗口 state 读取）──────────────
+        # ── 每秒刷新 ──────────────────────────────────────────────
         self._timer = QTimer(self)
         self._timer.setInterval(1000)
         self._timer.timeout.connect(self._auto_refresh)
         self._timer.start()
 
-    # ── 自动刷新 ─────────────────────────────────────────────────────────
+    # ── 内部刷新 ─────────────────────────────────────────────────────────
 
     def _auto_refresh(self) -> None:
-        mw = self.window()
-        state = getattr(mw, "state", None)
-        if state is not None:
-            self.update_from_state(state)
+        """从主窗口的 ContentArea.stack[0] (ExperimentSetupView) 读取最新参数。"""
+        try:
+            # DataPanel → ContentArea → ProjectView → MainWindow
+            content_area = self.parent()          # ContentArea
+            setup: ExperimentSetupView = content_area.stack.widget(0)
+            params = setup.get_params()
+            self.update_from_params(params)
+        except Exception:
+            pass
 
     # ── 公共更新接口 ──────────────────────────────────────────────────────
 
-    def update_from_state(self, state) -> None:
-        """从 AppState 对象读取数据并刷新所有指标。"""
-        from datetime import datetime
+    def update_from_params(self, params: dict) -> None:
+        """根据 ExperimentSetupView.get_params() 返回值刷新所有块。"""
+        target  = params.get("target", "—")
+        t_assay = params.get("target_assay", "—") or "—"
+        self._blk_target.set_label(target)
+        self._blk_target.set_value(t_assay)
 
-        # 实验识别
-        sim = getattr(state, "sim", None)
-        run = getattr(state, "last_run", None)
+        ligand   = params.get("ligand", "—")
+        hi_conc  = params.get("hi_conc", "—") or "—"
+        self._blk_ligand.set_label(ligand)
+        self._blk_ligand.set_value(hi_conc + " µM" if hi_conc != "—" else "—")
 
-        if sim is not None:
-            self._card_rmax.set_value(f"{sim.r_max_true:.4g}")
-            self._card_noise.set_value(f"{sim.noise_std:.4g}")
-            self._card_npts.set_value(str(sim.n_points))
-            self._card_xmin.set_value(f"{sim.x_min:.4g}")
-            self._card_xmax.set_value(f"{sim.x_max:.4g}")
+        buf = params.get("buffer", "—") or "—"
+        # 缓冲液文本可能很长，截断显示
+        self._blk_buf.set_label("缓冲液")
+        self._blk_buf.set_value(buf[:28] + "…" if len(buf) > 28 else buf)
 
-        if run is not None:
-            pts = len(run.x) if run.x else 0
-            self._card_points.set_value(str(pts) if pts else "—")
+        cap = params.get("capillary", "—") or "—"
+        # 只显示型号关键词
+        cap_short = cap.replace("Monolith ", "").replace(" Capillary", "")
+        self._blk_cap.set_label("毛细管")
+        self._blk_cap.set_value(cap_short)
 
-            if run.fit_kd is not None:
-                self._card_kd.set_value(f"{run.fit_kd:.4g}", "accent")
-                self._card_r2.set_value(
-                    f"{run.fit_r_squared:.4f}",
-                    "success" if run.fit_r_squared >= 0.95 else "warning",
-                )
-            else:
-                self._card_kd.set_value("—", "text_muted")
-                self._card_r2.set_value("—", "text_muted")
+        auto     = params.get("excitation_auto", True)
+        ex_pct   = params.get("excitation_pct", 20)
+        ex_text  = f"Auto-detect  {ex_pct} %" if auto else f"{ex_pct} %"
+        self._blk_excit.set_label("激发光功率")
+        self._blk_excit.set_value(ex_text)
 
-        self._ts_lbl.setText(datetime.now().strftime("%H:%M:%S"))
-
-    def set_experiment(self, name: str, exp_id: str,
-                       status: str = "draft") -> None:
-        """更新左侧实验标识区。"""
-        status_colors = {
-            "draft":   PALETTE["text_muted"],
-            "running": PALETTE["warning"],
-            "done":    PALETTE["success"],
-            "failed":  PALETTE["danger"],
-        }
-        color = status_colors.get(status, PALETTE["text_muted"])
-        self._exp_name.setText(name)
-        self._exp_id.setText(f"ID: {exp_id}")
-        self._exp_status.setText(f"●  {status.upper()}")
-        self._exp_status.setStyleSheet(
-            f"color: {color}; font-size: 11px; font-weight: 600;"
-        )
+        mst = params.get("mst_power", "—")
+        # 只取中文部分（"Medium  中" → "中"）
+        mst_short = mst.split("  ")[-1] if "  " in mst else mst
+        self._blk_mst.set_label("MST 功率")
+        self._blk_mst.set_value(mst_short)
 
 
 # ─────────────────────────────────────────────

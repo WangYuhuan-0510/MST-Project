@@ -139,11 +139,7 @@ def _edit_btn() -> QPushButton:
 
 def _section_card() -> QFrame:
     f = QFrame()
-    f.setStyleSheet(
-        f"background: {PALETTE['bg_card']};"
-        f"border: 1px solid {PALETTE['border']};"
-        "border-radius: 10px;"
-    )
+    f.setStyleSheet("background: transparent; border: none;")
     return f
 
 
@@ -285,15 +281,13 @@ class ExperimentSetupView(QScrollArea):
         r2.addStretch()
         tc.addLayout(r2)
 
-        # 此次实验浓度（只读）
+        # 此次实验浓度（可手动填入）
         r3 = QHBoxLayout(); r3.setSpacing(6)
         r3.addWidget(_field_lbl("此次实验浓度  Concentration in this assay", LABEL_W))
         self.edit_target_assay = QLineEdit("25nM")
-        self.edit_target_assay.setReadOnly(True)
         self.edit_target_assay.setFixedWidth(80)
-        self.edit_target_assay.setStyleSheet(_input_readonly_style())
+        self.edit_target_assay.setStyleSheet(_input_style())
         r3.addWidget(self.edit_target_assay)
-        r3.addWidget(_edit_btn())
         r3.addWidget(_help_btn())
         r3.addStretch()
         tc.addLayout(r3)
@@ -465,10 +459,7 @@ class ExperimentSetupView(QScrollArea):
         self.spin_excitation.setSuffix(" %")
         self.spin_excitation.setFixedWidth(84)
         self.spin_excitation.setStyleSheet(spinbox_style())
-        self.spin_excitation.setEnabled(False)
-        self.chk_auto.stateChanged.connect(
-            lambda s: self.spin_excitation.setEnabled(s == 0)
-        )
+        self.spin_excitation.setEnabled(True)   # 始终可修改
         ex_ctrl.addWidget(self.chk_auto)
         ex_ctrl.addWidget(self.spin_excitation)
         ex_ctrl.addWidget(_help_btn())
@@ -506,7 +497,7 @@ class ExperimentSetupView(QScrollArea):
 
         # ── 应用按钮 & 状态提示 ──────────────────────────────────────────────
         apply_row = QHBoxLayout()
-        self.btn_apply = QPushButton("应用到模拟器  Apply to Simulator")
+        self.btn_apply = QPushButton("应用")
         self.btn_apply.setFixedHeight(38)
         self.btn_apply.setStyleSheet(primary_btn_style())
         self.btn_apply.clicked.connect(self.apply_to_state)
