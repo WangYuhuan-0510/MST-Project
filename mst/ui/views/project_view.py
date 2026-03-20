@@ -487,10 +487,8 @@ class DataPanel(QFrame):
         self._blk_excit.set_value(ex_text)
 
         mst = params.get("mst_power", "—")
-        # 只取中文部分（"Medium  中" → "中"）
-        mst_short = mst.split("  ")[-1] if "  " in mst else mst
         self._blk_mst.set_label("MST 功率")
-        self._blk_mst.set_value(mst_short)
+        self._blk_mst.set_value(mst if mst else "—")
 
 
 # ─────────────────────────────────────────────

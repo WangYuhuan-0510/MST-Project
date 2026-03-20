@@ -215,12 +215,12 @@ class ExperimentSetupView(QScrollArea):
 
         # ── 顶部标题栏 ───────────────────────────────────────────────────────
         title_row = QHBoxLayout()
-        page_title = QLabel("Plan Your Experiment")
+        page_title = QLabel("实验设置")
         page_title.setStyleSheet(
             f"color: {PALETTE['text_primary']}; font-size: 22px; font-weight: 700;"
             " letter-spacing: -0.3px;"
         )
-        alter_btn = QPushButton("Alter data")
+        alter_btn = QPushButton("修改数据")
         alter_btn.setFixedHeight(32)
         alter_btn.setStyleSheet(secondary_btn_style())
         title_row.addWidget(page_title)
@@ -242,15 +242,14 @@ class ExperimentSetupView(QScrollArea):
         left_col.setSpacing(14)
         left_col.setAlignment(Qt.AlignTop)
 
-        # ── 分析物 Target ─────────────────────────────────────────────────
+        # ── 分析物 ────────────────────────────────────────────────────────
         target_card = _section_card()
         tc = QVBoxLayout(target_card)
         tc.setContentsMargins(20, 16, 20, 18)
         tc.setSpacing(11)
-        tc.addLayout(_section_header("◕", "分析物  Target"))
+        tc.addLayout(_section_header("◕", "分析物"))
         tc.addWidget(divider())
 
-        # 种类选择
         r0 = QHBoxLayout(); r0.setSpacing(6)
         self.cmb_target = QComboBox()
         self.cmb_target.addItems(["NTA", "His-Tag", "Biotin", "Amine", "Thiol"])
@@ -259,18 +258,16 @@ class ExperimentSetupView(QScrollArea):
         r0.addWidget(_help_btn())
         tc.addLayout(r0)
 
-        # His-Tag
         r1 = QHBoxLayout(); r1.setSpacing(6)
-        self.chk_histag = QCheckBox("使用 His-Tag 标签  Use His-Tag Labeling")
+        self.chk_histag = QCheckBox("使用 His-Tag 标签")
         self.chk_histag.setStyleSheet(_check_style())
         r1.addWidget(self.chk_histag)
         r1.addStretch()
         r1.addWidget(_help_btn())
         tc.addLayout(r1)
 
-        # 母液浓度
         r2 = QHBoxLayout(); r2.setSpacing(6)
-        r2.addWidget(_field_lbl("母液浓度  Concentration of stock solution", LABEL_W))
+        r2.addWidget(_field_lbl("母液浓度", LABEL_W))
         self.edit_target_stock = QLineEdit("5")
         self.edit_target_stock.setFixedWidth(80)
         self.edit_target_stock.setStyleSheet(_input_style())
@@ -281,9 +278,8 @@ class ExperimentSetupView(QScrollArea):
         r2.addStretch()
         tc.addLayout(r2)
 
-        # 此次实验浓度（可手动填入）
         r3 = QHBoxLayout(); r3.setSpacing(6)
-        r3.addWidget(_field_lbl("此次实验浓度  Concentration in this assay", LABEL_W))
+        r3.addWidget(_field_lbl("此次实验浓度", LABEL_W))
         self.edit_target_assay = QLineEdit("25nM")
         self.edit_target_assay.setFixedWidth(80)
         self.edit_target_assay.setStyleSheet(_input_style())
@@ -294,12 +290,12 @@ class ExperimentSetupView(QScrollArea):
 
         left_col.addWidget(target_card)
 
-        # ── 缓冲液 Assay Buffer ───────────────────────────────────────────
+        # ── 缓冲液 ────────────────────────────────────────────────────────
         buf_card = _section_card()
         bc = QVBoxLayout(buf_card)
         bc.setContentsMargins(20, 16, 20, 18)
         bc.setSpacing(11)
-        bc.addLayout(_section_header("⬛", "缓冲液  Assay Buffer"))
+        bc.addLayout(_section_header("⬛", "缓冲液"))
         bc.addWidget(divider())
 
         rb = QHBoxLayout(); rb.setSpacing(6)
@@ -312,20 +308,20 @@ class ExperimentSetupView(QScrollArea):
 
         left_col.addWidget(buf_card)
 
-        # ── 毛细管 Capillary ──────────────────────────────────────────────
+        # ── 毛细管 ────────────────────────────────────────────────────────
         cap_card = _section_card()
         cc = QVBoxLayout(cap_card)
         cc.setContentsMargins(20, 16, 20, 18)
         cc.setSpacing(11)
-        cc.addLayout(_section_header("▮", "毛细管  Capillary"))
+        cc.addLayout(_section_header("▮", "毛细管"))
         cc.addWidget(divider())
 
         rc = QHBoxLayout(); rc.setSpacing(6)
         self.cmb_capillary = QComboBox()
         self.cmb_capillary.addItems([
-            "Monolith NT.115 Capillary",
-            "Monolith NT.115 Premium Capillary",
-            "Monolith NT.Automated Capillary Chip",
+            "Monolith NT.115 毛细管",
+            "Monolith NT.115 Premium 毛细管",
+            "Monolith NT.自动化毛细管芯片",
         ])
         self.cmb_capillary.setStyleSheet(_combo_style())
         rc.addWidget(self.cmb_capillary, 1)
@@ -340,28 +336,26 @@ class ExperimentSetupView(QScrollArea):
         right_col.setSpacing(14)
         right_col.setAlignment(Qt.AlignTop)
 
-        # ── 配体 Ligand ───────────────────────────────────────────────────
+        # ── 配体 ──────────────────────────────────────────────────────────
         lig_card = _section_card()
         lc = QVBoxLayout(lig_card)
         lc.setContentsMargins(20, 16, 20, 18)
         lc.setSpacing(11)
-        lc.addLayout(_section_header("◆", "配体  Ligand"))
+        lc.addLayout(_section_header("◆", "配体"))
         lc.addWidget(divider())
 
-        # 种类
         rl0 = QHBoxLayout(); rl0.setSpacing(6)
         self.cmb_ligand = QComboBox()
-        self.cmb_ligand.addItems(["mCNGC30", "EGFR", "HER2", "Custom"])
+        self.cmb_ligand.addItems(["mCNGC30", "EGFR", "HER2", "自定义"])
         self.cmb_ligand.setStyleSheet(_combo_style())
         rl0.addWidget(self.cmb_ligand, 1)
         rl0.addWidget(_help_btn())
         lc.addLayout(rl0)
 
-        # 预估 Kd
         rl1 = QHBoxLayout(); rl1.setSpacing(6)
-        rl1.addWidget(_field_lbl("预估 Kd  Estimated Kd", LABEL_W))
+        rl1.addWidget(_field_lbl("预估 Kd", LABEL_W))
         self.edit_kd = QLineEdit()
-        self.edit_kd.setPlaceholderText("optional")
+        self.edit_kd.setPlaceholderText("可选")
         self.edit_kd.setFixedWidth(80)
         self.edit_kd.setStyleSheet(_input_style())
         self.cmb_kd_unit = _unit_combo(["µM", "nM", "mM"])
@@ -371,9 +365,8 @@ class ExperimentSetupView(QScrollArea):
         rl1.addStretch()
         lc.addLayout(rl1)
 
-        # 配体母液浓度
         rl2 = QHBoxLayout(); rl2.setSpacing(6)
-        rl2.addWidget(_field_lbl("母液浓度  Concentration of stock solution", LABEL_W))
+        rl2.addWidget(_field_lbl("母液浓度", LABEL_W))
         self.edit_lig_stock = QLineEdit("16")
         self.edit_lig_stock.setFixedWidth(80)
         self.edit_lig_stock.setStyleSheet(_input_style())
@@ -384,27 +377,24 @@ class ExperimentSetupView(QScrollArea):
         rl2.addStretch()
         lc.addLayout(rl2)
 
-        # 有机溶剂
         rl3 = QHBoxLayout(); rl3.setSpacing(6)
-        self.chk_dmso = QCheckBox("配体溶于有机溶剂（如 DMSO）  Ligand in organic solvent like DMSO")
+        self.chk_dmso = QCheckBox("配体溶于有机溶剂（如 DMSO）")
         self.chk_dmso.setStyleSheet(_check_style())
         rl3.addWidget(self.chk_dmso)
         rl3.addStretch()
         rl3.addWidget(_help_btn())
         lc.addLayout(rl3)
 
-        # 配体缓冲液比例（只读展示）
         rl4 = QHBoxLayout(); rl4.setSpacing(6)
-        rl4.addWidget(_field_lbl("配体缓冲液  Ligand buffer in this assay", LABEL_W))
+        rl4.addWidget(_field_lbl("配体缓冲液比例", LABEL_W))
         self.lbl_lig_buf = _value_lbl("12.5%")
         rl4.addWidget(self.lbl_lig_buf)
         rl4.addStretch()
         rl4.addWidget(_help_btn())
         lc.addLayout(rl4)
 
-        # 最高浓度
         rl5 = QHBoxLayout(); rl5.setSpacing(6)
-        rl5.addWidget(_field_lbl("此次实验最高浓度  Highest concentration in this assay", LABEL_W))
+        rl5.addWidget(_field_lbl("此次实验最高浓度", LABEL_W))
         self.edit_hi_conc = QLineEdit("2")
         self.edit_hi_conc.setFixedWidth(80)
         self.edit_hi_conc.setStyleSheet(_input_style())
@@ -418,18 +408,13 @@ class ExperimentSetupView(QScrollArea):
         lc.addLayout(rl5)
 
         right_col.addWidget(lig_card)
-        right_col.addStretch()
 
-        two_col.addLayout(left_col, 1)
-        two_col.addLayout(right_col, 1)
-        root.addLayout(two_col)
-
-        # ── 系统设置 System Settings ─────────────────────────────────────────
+        # ── 系统设置（右栏，配体下方）─────────────────────────────────────
         sys_card = _section_card()
         sc = QVBoxLayout(sys_card)
         sc.setContentsMargins(20, 16, 20, 18)
         sc.setSpacing(12)
-        sc.addLayout(_section_header("✦", "系统设置  System Settings"))
+        sc.addLayout(_section_header("✦", "系统设置"))
         sc.addWidget(divider())
 
         sys_row = QHBoxLayout()
@@ -441,7 +426,7 @@ class ExperimentSetupView(QScrollArea):
         ex_hdr = QHBoxLayout(); ex_hdr.setSpacing(6)
         ex_icon = QLabel("☀")
         ex_icon.setStyleSheet(f"color: {PALETTE['accent']}; font-size: 16px;")
-        ex_title = QLabel("激发光功率  Excitation Power")
+        ex_title = QLabel("激发光功率")
         ex_title.setStyleSheet(label_style(13, 600, "text_secondary"))
         ex_hdr.addWidget(ex_icon)
         ex_hdr.addWidget(ex_title)
@@ -449,7 +434,7 @@ class ExperimentSetupView(QScrollArea):
         ex_blk.addLayout(ex_hdr)
 
         ex_ctrl = QHBoxLayout(); ex_ctrl.setSpacing(6)
-        self.chk_auto = QCheckBox("Auto-detect")
+        self.chk_auto = QCheckBox("自动检测")
         self.chk_auto.setStyleSheet(_check_style())
         self.chk_auto.setChecked(True)
         self.spin_excitation = QSpinBox()
@@ -459,7 +444,7 @@ class ExperimentSetupView(QScrollArea):
         self.spin_excitation.setSuffix(" %")
         self.spin_excitation.setFixedWidth(84)
         self.spin_excitation.setStyleSheet(spinbox_style())
-        self.spin_excitation.setEnabled(True)   # 始终可修改
+        self.spin_excitation.setEnabled(True)
         ex_ctrl.addWidget(self.chk_auto)
         ex_ctrl.addWidget(self.spin_excitation)
         ex_ctrl.addWidget(_help_btn())
@@ -471,7 +456,7 @@ class ExperimentSetupView(QScrollArea):
         mst_hdr = QHBoxLayout(); mst_hdr.setSpacing(6)
         mst_icon = QLabel("✳")
         mst_icon.setStyleSheet(f"color: {PALETTE['accent']}; font-size: 16px;")
-        mst_title = QLabel("MST 功率  MST-Power")
+        mst_title = QLabel("MST 功率")
         mst_title.setStyleSheet(label_style(13, 600, "text_secondary"))
         mst_hdr.addWidget(mst_icon)
         mst_hdr.addWidget(mst_title)
@@ -480,9 +465,9 @@ class ExperimentSetupView(QScrollArea):
 
         mst_ctrl = QHBoxLayout(); mst_ctrl.setSpacing(6)
         self.cmb_mst = QComboBox()
-        self.cmb_mst.addItems(["Low  低", "Medium  中", "High  高"])
+        self.cmb_mst.addItems(["低", "中", "高"])
         self.cmb_mst.setCurrentIndex(1)
-        self.cmb_mst.setFixedWidth(130)
+        self.cmb_mst.setFixedWidth(100)
         self.cmb_mst.setStyleSheet(_combo_style())
         mst_ctrl.addWidget(self.cmb_mst)
         mst_ctrl.addWidget(_edit_btn())
@@ -493,9 +478,10 @@ class ExperimentSetupView(QScrollArea):
         sys_row.addLayout(ex_blk)
         sys_row.addLayout(mst_blk)
         sc.addLayout(sys_row)
-        root.addWidget(sys_card)
 
-        # ── 应用按钮 & 状态提示 ──────────────────────────────────────────────
+        right_col.addWidget(sys_card)
+
+        # ── 应用按钮（右栏，系统设置下方）───────────────────────────────────
         apply_row = QHBoxLayout()
         self.btn_apply = QPushButton("应用")
         self.btn_apply.setFixedHeight(38)
@@ -509,7 +495,12 @@ class ExperimentSetupView(QScrollArea):
         apply_row.addSpacing(12)
         apply_row.addWidget(self.status_lbl)
         apply_row.addStretch()
-        root.addLayout(apply_row)
+        right_col.addLayout(apply_row)
+        right_col.addStretch()
+
+        two_col.addLayout(left_col, 1)
+        two_col.addLayout(right_col, 1)
+        root.addLayout(two_col)
         root.addStretch()
 
         self._load_from_state()
@@ -580,5 +571,5 @@ class ExperimentSetupView(QScrollArea):
             "hi_conc":           self.edit_hi_conc.text(),
             "excitation_auto":   self.chk_auto.isChecked(),
             "excitation_pct":    self.spin_excitation.value(),
-            "mst_power":         self.cmb_mst.currentText(),
+            "mst_power":         self.cmb_mst.currentText(),   # 低 / 中 / 高
         }
