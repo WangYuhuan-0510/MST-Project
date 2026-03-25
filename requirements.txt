@@ -7,4 +7,8 @@ h5py>=3.10.0
 reportlab>=4.0.0
 pyserial>=3.5
 pytest>=8.0.0
-# 代码结构 tree /F > structure.txt
+# 1.代码结构
+tree /F > structure.txt
+# 2. 把所有修改的文件加入暂存
+git add .
+git commit -m "这里写你改了什么：比如完成文件操作实验代码"

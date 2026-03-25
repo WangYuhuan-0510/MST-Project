@@ -293,7 +293,7 @@ class _ExperimentPage(QWidget):
         top_lo.setSpacing(4)
 
         dev_row = QHBoxLayout()
-        self.device_lbl = QLabel("仪器：PW-MST")
+        self.device_lbl = QLabel("Device：PW-MST")
         self.device_lbl.setStyleSheet(
             f"color: {PALETTE['text_secondary']}; font-size: 13px;"
         )

@@ -183,8 +183,8 @@ class WelcomeView(QWidget):
         center_lo.setContentsMargins(0, 0, 0, 0)
         center_lo.setSpacing(0)
 
-        self.btn_new  = _SessionBtn("📄", "新建实验",   primary=True)
-        self.btn_open = _SessionBtn("📂", "打开已有实验", primary=False)
+        self.btn_new  = _SessionBtn("📄", "Start New Experiment",   primary=False)
+        self.btn_open = _SessionBtn("📂", "Open Existing Experiment", primary=False)
         self.btn_new.clicked.connect(self._on_new)
         self.btn_open.clicked.connect(self._on_open)
 
@@ -193,7 +193,7 @@ class WelcomeView(QWidget):
         center_lo.addWidget(self.btn_open)
         center_lo.addSpacing(28)
 
-        self._recent_header = QLabel("最近打开：")
+        self._recent_header = QLabel("Recently Opened:")
         self._recent_header.setStyleSheet(
             f"color: {PALETTE['text_muted']}; font-size: 12px; font-weight: 600;"
             " letter-spacing: 0.5px;"
@@ -231,7 +231,7 @@ class WelcomeView(QWidget):
 
         recent = _load_recent()
         if not recent:
-            no_lbl = QLabel("暂无最近文件")
+            no_lbl = QLabel("No recent files")
             no_lbl.setStyleSheet(f"color: {PALETTE['text_muted']}; font-size: 12px;")
             self._recent_lo.addWidget(no_lbl)
             self._recent_header.hide()
