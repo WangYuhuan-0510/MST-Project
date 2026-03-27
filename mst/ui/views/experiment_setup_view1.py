@@ -5,7 +5,6 @@ experiment_setup_view.py  （Plan 页面）
   分析物 / 配体 / 缓冲液 / 毛细管 / 系统设置
 """
 from __future__ import annotations
-from pathlib import Path
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
@@ -22,8 +21,6 @@ from .ui_style import (
     label_style,
     divider,
 )
-
-_COMBO_ARROW_ICON = (Path(__file__).resolve().parent / "icons" / "combo_down_black.svg").as_posix()
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -69,27 +66,14 @@ def _combo_style() -> str:
             border-radius: 6px;
             color: {PALETTE['text_primary']};
             font-size: 13px;
-            padding: 4px 30px 4px 10px;
+            padding: 4px 10px;
             min-height: 28px;
         }}
         QComboBox:focus {{
             border: 1px solid {PALETTE['border_active']};
         }}
-        QComboBox:hover {{
-            border: 1px solid {PALETTE['accent']};
-        }}
         QComboBox::drop-down {{
-            subcontrol-origin: padding;
-            subcontrol-position: top right;
-            width: 24px;
-            border: none;
-            background: transparent;
-        }}
-        QComboBox::down-arrow {{
-            image: url("{_COMBO_ARROW_ICON}");
-            width: 12px;
-            height: 12px;
-            margin-right: 6px;
+            border: none; width: 24px;
         }}
         QComboBox QAbstractItemView {{
             background: {PALETTE['bg_card']};
@@ -197,7 +181,7 @@ def _value_lbl(text: str) -> QLabel:
 def _unit_combo(items: list[str]) -> QComboBox:
     c = QComboBox()
     c.addItems(items)
-    c.setFixedWidth(92)
+    c.setFixedWidth(72)
     c.setStyleSheet(_combo_style())
     return c
 
@@ -287,7 +271,7 @@ class ExperimentSetupView(QScrollArea):
         self.edit_target_stock = QLineEdit("5")
         self.edit_target_stock.setFixedWidth(80)
         self.edit_target_stock.setStyleSheet(_input_style())
-        self.cmb_target_unit = _unit_combo(["M","mM","µM", "nM", "pM"])
+        self.cmb_target_unit = _unit_combo(["µM", "nM", "mM"])
         r2.addWidget(self.edit_target_stock)
         r2.addWidget(self.cmb_target_unit)
         r2.addWidget(_help_btn())
@@ -374,7 +358,7 @@ class ExperimentSetupView(QScrollArea):
         self.edit_kd.setPlaceholderText("可选")
         self.edit_kd.setFixedWidth(80)
         self.edit_kd.setStyleSheet(_input_style())
-        self.cmb_kd_unit = _unit_combo(["M","mM","µM", "nM", "pM"])
+        self.cmb_kd_unit = _unit_combo(["µM", "nM", "mM"])
         rl1.addWidget(self.edit_kd)
         rl1.addWidget(self.cmb_kd_unit)
         rl1.addWidget(_help_btn())
@@ -386,7 +370,7 @@ class ExperimentSetupView(QScrollArea):
         self.edit_lig_stock = QLineEdit("16")
         self.edit_lig_stock.setFixedWidth(80)
         self.edit_lig_stock.setStyleSheet(_input_style())
-        self.cmb_lig_unit = _unit_combo(["M","mM","µM", "nM", "pM"])
+        self.cmb_lig_unit = _unit_combo(["µM", "nM", "mM"])
         rl2.addWidget(self.edit_lig_stock)
         rl2.addWidget(self.cmb_lig_unit)
         rl2.addWidget(_help_btn())

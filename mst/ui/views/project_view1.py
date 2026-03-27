@@ -154,56 +154,49 @@ class PageTabBar(QWidget):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(52)
-        self.setStyleSheet("background: transparent;")
+        self.setFixedHeight(48)
         lo = QHBoxLayout(self)
-        lo.setContentsMargins(0, 0, 0, 0)
-        lo.setSpacing(8)
+        lo.setContentsMargins(24, 0, 24, 0)
+        lo.setSpacing(4)
         self._buttons: list[QPushButton] = []
-        self._current_idx = 0
 
         for i, name in enumerate(self.TABS):
-            btn = QPushButton(f"{i + 1}  {name}")
+            btn = QPushButton(name)
             btn.setCheckable(True)
             btn.setCursor(Qt.PointingHandCursor)
             btn.setFixedHeight(32)
             btn.setStyleSheet(f"""
                 QPushButton {{
-                    background: {PALETTE["bg_main"]};
-                    border: 1px solid {PALETTE["border"]};
+                    background: transparent;
+                    border: none;
                     border-radius: 6px;
                     color: {PALETTE["text_secondary"]};
                     font-size: 13px;
-                    font-weight: 600;
-                    padding: 0 14px;
+                    font-weight: 500;
+                    padding: 0 16px;
                     letter-spacing: 0.2px;
                 }}
                 QPushButton:hover {{
                     background: {PALETTE["bg_hover"]};
                     color: {PALETTE["text_primary"]};
-                    border: 1px solid {PALETTE["accent"]};
                 }}
                 QPushButton:checked {{
                     background: {PALETTE["bg_active"]};
                     color: {PALETTE["accent"]};
                     font-weight: 600;
-                    border: 1px solid {PALETTE["accent"]};
                 }}
             """)
             btn.clicked.connect(lambda _, x=i: self._select(x))
             self._buttons.append(btn)
             lo.addWidget(btn)
 
+        lo.addStretch()
         self._select(0)
 
     def _select(self, idx: int) -> None:
-        self._current_idx = idx
         for i, btn in enumerate(self._buttons):
             btn.setChecked(i == idx)
         self.page_changed.emit(idx)
-
-    def current_index(self) -> int:
-        return self._current_idx
 
 
 # ─────────────────────────────────────────────
@@ -510,34 +503,13 @@ class ContentArea(QWidget):
         vl.setContentsMargins(0, 0, 0, 0)
         vl.setSpacing(0)
 
-        header_row = QHBoxLayout()
-        header_row.setContentsMargins(28, 4, 28, 4)
-        header_row.setSpacing(16)
-
-        self.page_title = QLabel("")
-        self.page_title.setStyleSheet(
-            f"color: {PALETTE['accent']};"
-            "font-size: 24px; font-weight: 800;"
-            "padding: 0px;"
-            "letter-spacing: 0.2px;"
-        )
-        header_row.addWidget(self.page_title, 0, Qt.AlignVCenter | Qt.AlignLeft)
-        # 让 tab 组落在中间偏左，而不是贴到最右侧
-        header_row.addSpacing(120)
-
         self.tab_bar = PageTabBar()
-        header_row.addWidget(self.tab_bar, 0, Qt.AlignVCenter | Qt.AlignLeft)
-        header_row.addStretch()
-        vl.addLayout(header_row)
+        vl.addWidget(self.tab_bar)
 
         sep = QFrame()
         sep.setFixedHeight(1)
         sep.setStyleSheet(f"background: {PALETTE['border']};")
         vl.addWidget(sep)
-
-        body = QHBoxLayout()
-        body.setContentsMargins(0, 0, 0, 0)
-        body.setSpacing(0)
 
         self.stack = QStackedWidget()
         self.stack.setStyleSheet("background: transparent;")
@@ -545,30 +517,13 @@ class ContentArea(QWidget):
         self.stack.addWidget(InstructionsPage())      # 1 – Instructions
         self.stack.addWidget(RunView())               # 2 – Results
         self.stack.addWidget(AnalysisView())          # 3 – Details
-        body.addWidget(self.stack, 1)
+        vl.addWidget(self.stack, 1)
 
-        # 右侧独立空白区：与实验设置同层并排，不覆盖内容
-        self.right_blank_panel = QFrame()
-        self.right_blank_panel.setFixedWidth(260)
-        self.right_blank_panel.setStyleSheet(
-            f"background: {PALETTE['bg_sidebar']};"
-            f"border-left: 1px solid {PALETTE['border']};"
-            "border-top: none; border-right: none; border-bottom: none;"
-        )
-        body.addWidget(self.right_blank_panel)
-        vl.addLayout(body, 1)
-
-        self.tab_bar.page_changed.connect(self._on_page_changed)
+        self.tab_bar.page_changed.connect(self.stack.setCurrentIndex)
 
         # ── 底部固定数据面板（不属于任何标签页）──────────────────────
         self.data_panel = DataPanel()
         vl.addWidget(self.data_panel)
-
-        self._on_page_changed(self.tab_bar.current_index())
-
-    def _on_page_changed(self, idx: int) -> None:
-        self.stack.setCurrentIndex(idx)
-        self.page_title.setText(f"{idx + 1}. {self.tab_bar.TABS[idx]}")
 
 
 # ─────────────────────────────────────────────
