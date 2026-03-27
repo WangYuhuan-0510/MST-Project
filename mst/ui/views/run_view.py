@@ -6,7 +6,7 @@ run_view.py  （Results 页面）
 from __future__ import annotations
 
 from collections import deque
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from PySide6.QtCore import QTimer, Slot
 from PySide6.QtWidgets import (
@@ -396,6 +396,11 @@ class RunView(QWidget):
         self.plot_scan = CapillaryScanPlot(self)
         self.plot_scan.point_clicked.connect(self.vm.set_selected_capillary)
         layout_scan.addWidget(self.plot_scan)
+        self.btn_review_scan = QPushButton("Review")
+        self.btn_review_scan.setFixedHeight(30)
+        self.btn_review_scan.setStyleSheet(secondary_btn_style())
+        self.btn_review_scan.clicked.connect(lambda: self._open_review("scan"))
+        layout_scan.addWidget(self.btn_review_scan)
         plots.addWidget(box_scan, 1)
 
         box_trace = QGroupBox("MST Traces（0s 开红外，拖动紫线调 T1）")
@@ -407,6 +412,11 @@ class RunView(QWidget):
         self.plot_trace = MSTTracePlot(self)
         self.plot_trace.t1_changed.connect(self.vm.set_t1)
         layout_trace.addWidget(self.plot_trace)
+        self.btn_review_trace = QPushButton("Review")
+        self.btn_review_trace.setFixedHeight(30)
+        self.btn_review_trace.setStyleSheet(secondary_btn_style())
+        self.btn_review_trace.clicked.connect(lambda: self._open_review("trace"))
+        layout_trace.addWidget(self.btn_review_trace)
         plots.addWidget(box_trace, 1)
 
         box_dose = QGroupBox("Dose Response（点击点：剔除 / 恢复）")
@@ -418,18 +428,12 @@ class RunView(QWidget):
         self.plot_dose = DoseResponsePlot(self)
         self.plot_dose.point_clicked.connect(self.vm.toggle_enabled)
         layout_dose.addWidget(self.plot_dose)
+        self.btn_review_dose = QPushButton("Review")
+        self.btn_review_dose.setFixedHeight(30)
+        self.btn_review_dose.setStyleSheet(secondary_btn_style())
+        self.btn_review_dose.clicked.connect(lambda: self._open_review("dose"))
+        layout_dose.addWidget(self.btn_review_dose)
         plots.addWidget(box_dose, 1)
-
-        # ── Review 按钮 ───────────────────────────────────────────────────
-        actions = QHBoxLayout()
-        actions.addStretch(1)
-        self.btn_review = QPushButton("Review")
-        self.btn_review.setFixedHeight(34)
-        self.btn_review.setStyleSheet(secondary_btn_style())
-        self.btn_review.clicked.connect(self._open_review)
-        actions.addWidget(self.btn_review)
-        actions.addStretch(1)
-        root.addLayout(actions)
         root.addStretch(1)
 
         # ── 信号连接（模拟模式）──────────────────────────────────────────
@@ -725,8 +729,18 @@ class RunView(QWidget):
         elif (not should_exclude) and (not currently_enabled):
             self.vm.toggle_enabled(idx)
 
-    def _open_review(self) -> None:
-        dlg = _ReviewDialog(self, self.vm)
+    def _open_review(self, target: str) -> None:
+        serial_snapshot: Optional[Dict[str, Any]] = None
+        if self._mode == "serial":
+            serial_snapshot = {
+                "t": self._serial_buf.time_list(),
+                "mat": self._serial_buf.trace_matrix(),
+                "sc": self._serial_buf.scan_center(),
+                "mask": list(self._serial_buf.enabled_mask),
+                "sel": self.vm.selected_capillary,
+                "t1": float(self.spin_t1_ser.value()),
+            }
+        dlg = _ReviewDialog(self, self.vm, target=target, serial_snapshot=serial_snapshot)
         dlg.exec()
 
 
@@ -734,10 +748,24 @@ class RunView(QWidget):
 #  Review dialog  （逻辑不变，样式统一）
 # ─────────────────────────────────────────────────────────────────────────────
 class _ReviewDialog(QDialog):
-    def __init__(self, parent: QWidget, vm: RunAnalysisViewModel) -> None:
+    def __init__(
+        self,
+        parent: QWidget,
+        vm: RunAnalysisViewModel,
+        *,
+        target: str,
+        serial_snapshot: Optional[Dict[str, Any]] = None,
+    ) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Review（缩放 / 平移可用）")
-        self.resize(1400, 900)
+        titles = {
+            "scan": "Capillary Scan Review（缩放 / 平移可用）",
+            "trace": "MST Traces Review（缩放 / 平移可用）",
+            "dose": "Dose Response Review（缩放 / 平移可用）",
+        }
+        self._target = target if target in titles else "scan"
+        self._serial_snapshot = serial_snapshot
+        self.setWindowTitle(titles[self._target])
+        self.resize(1100, 760)
         self.setStyleSheet(f"background: {PALETTE['bg_main']};")
         self._vm = vm
 
@@ -746,65 +774,96 @@ class _ReviewDialog(QDialog):
         root.setSpacing(12)
 
         _gb = groupbox_style()
-        plots = QHBoxLayout()
-        plots.setSpacing(12)
-        root.addLayout(plots, 1)
+        self.plot_scan = None
+        self.plot_trace = None
+        self.plot_dose = None
 
-        box_scan = QGroupBox("Capillary Scan")
-        box_scan.setStyleSheet(_gb)
-        layout_scan = QVBoxLayout(box_scan)
-        layout_scan.setContentsMargins(8, 18, 8, 8)
-        self.plot_scan = CapillaryScanPlot(self, enable_zoom=True)
-        layout_scan.addWidget(self.plot_scan)
-        plots.addWidget(box_scan, 1)
+        if self._target == "scan":
+            box = QGroupBox("Capillary Scan")
+            box.setStyleSheet(_gb)
+            lo = QVBoxLayout(box)
+            lo.setContentsMargins(8, 18, 8, 8)
+            self.plot_scan = CapillaryScanPlot(self, enable_zoom=True)
+            lo.addWidget(self.plot_scan)
+            root.addWidget(box, 1)
+        elif self._target == "trace":
+            box = QGroupBox("MST Traces")
+            box.setStyleSheet(_gb)
+            lo = QVBoxLayout(box)
+            lo.setContentsMargins(8, 18, 8, 8)
+            self.plot_trace = MSTTracePlot(self, enable_zoom=True)
+            lo.addWidget(self.plot_trace)
+            root.addWidget(box, 1)
+        else:
+            box = QGroupBox("Dose Response")
+            box.setStyleSheet(_gb)
+            lo = QVBoxLayout(box)
+            lo.setContentsMargins(8, 18, 8, 8)
+            self.plot_dose = DoseResponsePlot(self, enable_zoom=True)
+            lo.addWidget(self.plot_dose)
+            root.addWidget(box, 1)
 
-        box_trace = QGroupBox("MST Traces")
-        box_trace.setStyleSheet(_gb)
-        layout_trace = QVBoxLayout(box_trace)
-        layout_trace.setContentsMargins(8, 18, 8, 8)
-        self.plot_trace = MSTTracePlot(self, enable_zoom=True)
-        layout_trace.addWidget(self.plot_trace)
-        plots.addWidget(box_trace, 1)
-
-        box_dose = QGroupBox("Dose Response")
-        box_dose.setStyleSheet(_gb)
-        layout_dose = QVBoxLayout(box_dose)
-        layout_dose.setContentsMargins(8, 18, 8, 8)
-        self.plot_dose = DoseResponsePlot(self, enable_zoom=True)
-        layout_dose.addWidget(self.plot_dose)
-        plots.addWidget(box_dose, 1)
-
-        self._vm.changed.connect(self._render)
+        if self._serial_snapshot is None:
+            self._vm.changed.connect(self._render)
         self._render()
 
     def closeEvent(self, event) -> None:
-        try:
-            self._vm.changed.disconnect(self._render)
-        except Exception:
-            pass
+        if self._serial_snapshot is None:
+            try:
+                self._vm.changed.disconnect(self._render)
+            except Exception:
+                pass
         super().closeEvent(event)
 
     def _render(self) -> None:
-        self.plot_scan.set_scan(
-            self._vm.scan_center,
-            enabled_mask=self._vm.enabled_mask,
-            selected_idx=self._vm.selected_capillary,
-        )
-        self.plot_trace.set_traces(
-            self._vm.t,
-            self._vm.traces,
-            enabled_mask=self._vm.enabled_mask,
-            selected_idx=self._vm.selected_capillary,
-            t_ir_on_s=self._vm.t_ir_on_s,
-            t1_s=self._vm.t1_s,
-        )
-        fit_curve = None
-        if self._vm.fit is not None:
-            fit_curve = (self._vm.fit.x_fit, self._vm.fit.y_fit, self._vm.fit.text)
-        self.plot_dose.set_data(
-            self._vm.concentrations,
-            self._vm.feature_y,
-            enabled_mask=self._vm.enabled_mask,
-            selected_idx=self._vm.selected_capillary,
-            fit_curve=fit_curve,
-        )
+        if self._serial_snapshot is None:
+            sc = self._vm.scan_center
+            mask = self._vm.enabled_mask
+            sel = self._vm.selected_capillary
+            t = self._vm.t
+            mat = self._vm.traces
+            t_ir = self._vm.t_ir_on_s
+            t1 = self._vm.t1_s
+            conc = self._vm.concentrations
+            feat = self._vm.feature_y
+            fit_curve = None
+            if self._vm.fit is not None:
+                fit_curve = (self._vm.fit.x_fit, self._vm.fit.y_fit, self._vm.fit.text)
+        else:
+            sc = self._serial_snapshot["sc"]
+            mask = self._serial_snapshot["mask"]
+            sel = self._serial_snapshot["sel"]
+            t = self._serial_snapshot["t"]
+            mat = self._serial_snapshot["mat"]
+            t_ir = 0.0
+            t1 = self._serial_snapshot["t1"]
+            if len(t) >= 2:
+                dt = t[1] - t[0]
+                if dt > 0:
+                    t1_idx = max(0, min(int((t1 - t[0]) / dt), len(t) - 1))
+                else:
+                    t1_idx = 0
+                feat = [mat[i][t1_idx] if len(mat[i]) > t1_idx else 0.0 for i in range(len(mat))]
+            else:
+                feat = [0.0 for _ in range(len(mat))]
+            conc = list(range(len(mat)))
+            fit_curve = None
+
+        if self.plot_scan is not None:
+            self.plot_scan.set_scan(sc, enabled_mask=mask, selected_idx=sel)
+        if self.plot_trace is not None:
+            self.plot_trace.set_traces(
+                t, mat,
+                enabled_mask=mask,
+                selected_idx=sel,
+                t_ir_on_s=t_ir,
+                t1_s=t1,
+            )
+        if self.plot_dose is not None:
+            self.plot_dose.set_data(
+                conc,
+                feat,
+                enabled_mask=mask,
+                selected_idx=sel,
+                fit_curve=fit_curve,
+            )
