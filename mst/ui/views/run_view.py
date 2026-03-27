@@ -186,6 +186,8 @@ class RunView(QWidget):
         self._render_timer  = QTimer(self)
         self._render_timer.setInterval(80)
         self._render_timer.timeout.connect(self._render_serial)
+        self._sim_paused = False
+        self._serial_paused = False
 
         # 当前模式："sim" | "serial"
         self._mode = "sim"
@@ -257,6 +259,20 @@ class RunView(QWidget):
         self.btn_stop.clicked.connect(self.stop)
         self.btn_stop.setEnabled(False)
         sim_ctrl.addWidget(self.btn_stop)
+
+        self.btn_pause = QPushButton("⏸  暂停")
+        self.btn_pause.setFixedHeight(34)
+        self.btn_pause.setStyleSheet(secondary_btn_style())
+        self.btn_pause.clicked.connect(self.pause)
+        self.btn_pause.setEnabled(False)
+        sim_ctrl.addWidget(self.btn_pause)
+
+        self.btn_resume = QPushButton("▶  继续")
+        self.btn_resume.setFixedHeight(34)
+        self.btn_resume.setStyleSheet(primary_btn_style())
+        self.btn_resume.clicked.connect(self.resume)
+        self.btn_resume.setEnabled(False)
+        sim_ctrl.addWidget(self.btn_resume)
 
         sim_ctrl.addSpacing(8)
         t1_lbl = QLabel("T1 (s)")
@@ -355,6 +371,20 @@ class RunView(QWidget):
         self.btn_ser_stop.clicked.connect(self._on_serial_stop)
         self.btn_ser_stop.setEnabled(False)
         ser_ctrl.addWidget(self.btn_ser_stop)
+
+        self.btn_ser_pause = QPushButton("⏸  暂停")
+        self.btn_ser_pause.setFixedHeight(34)
+        self.btn_ser_pause.setStyleSheet(secondary_btn_style())
+        self.btn_ser_pause.clicked.connect(self._on_serial_pause)
+        self.btn_ser_pause.setEnabled(False)
+        ser_ctrl.addWidget(self.btn_ser_pause)
+
+        self.btn_ser_resume = QPushButton("▶  继续")
+        self.btn_ser_resume.setFixedHeight(34)
+        self.btn_ser_resume.setStyleSheet(primary_btn_style())
+        self.btn_ser_resume.clicked.connect(self._on_serial_resume)
+        self.btn_ser_resume.setEnabled(False)
+        ser_ctrl.addWidget(self.btn_ser_resume)
 
         ser_ctrl.addSpacing(8)
         t1_lbl2 = QLabel("T1 (s)")
@@ -527,6 +557,7 @@ class RunView(QWidget):
         self._serial_bad_frames = 0
         self._serial_last_chunk_hex = "-"
         self._serial_port_echo = "-"
+        self._serial_paused = False
         self._update_serial_debug()
 
         self._serial_worker = SerialWorker(port=port, baudrate=baud, parent=self)
@@ -539,6 +570,8 @@ class RunView(QWidget):
 
         self.btn_ser_connect.setEnabled(False)
         self.btn_ser_stop.setEnabled(True)
+        self.btn_ser_pause.setEnabled(True)
+        self.btn_ser_resume.setEnabled(False)
         self._render_timer.start()
 
     def _on_serial_stop(self) -> None:
@@ -549,6 +582,9 @@ class RunView(QWidget):
             self._serial_worker = None
         self.btn_ser_connect.setEnabled(True)
         self.btn_ser_stop.setEnabled(False)
+        self.btn_ser_pause.setEnabled(False)
+        self.btn_ser_resume.setEnabled(False)
+        self._serial_paused = False
         self._set_ser_status("已断开", "text_muted")
         self._update_serial_debug()
 
@@ -556,6 +592,27 @@ class RunView(QWidget):
         self._render_timer.stop()
         self.btn_ser_connect.setEnabled(True)
         self.btn_ser_stop.setEnabled(False)
+        self.btn_ser_pause.setEnabled(False)
+        self.btn_ser_resume.setEnabled(False)
+        self._serial_paused = False
+
+    def _on_serial_pause(self) -> None:
+        if self._serial_worker is None or self._serial_paused:
+            return
+        self._serial_paused = True
+        self._render_timer.stop()
+        self.btn_ser_pause.setEnabled(False)
+        self.btn_ser_resume.setEnabled(True)
+        self._set_ser_status("串口采集中（已暂停显示）", "warning")
+
+    def _on_serial_resume(self) -> None:
+        if self._serial_worker is None or (not self._serial_paused):
+            return
+        self._serial_paused = False
+        self._render_timer.start()
+        self.btn_ser_pause.setEnabled(True)
+        self.btn_ser_resume.setEnabled(False)
+        self._set_ser_status("串口采集中（已继续）", "success")
 
     # ── 串口数据槽 ────────────────────────────────────────────────────────
 
@@ -658,6 +715,9 @@ class RunView(QWidget):
     def start(self) -> None:
         self.btn_start.setEnabled(False)
         self.btn_stop.setEnabled(True)
+        self.btn_pause.setEnabled(True)
+        self.btn_resume.setEnabled(False)
+        self._sim_paused = False
         self._set_status("采集中…", "warning")
         self.vm.start_simulation()
         self._sim_timer.start()
@@ -667,7 +727,28 @@ class RunView(QWidget):
         self.vm.stop()
         self.btn_start.setEnabled(True)
         self.btn_stop.setEnabled(False)
+        self.btn_pause.setEnabled(False)
+        self.btn_resume.setEnabled(False)
+        self._sim_paused = False
         self._set_status("已停止（模拟）。可继续调整 T1 / 剔除点查看联动效果。", "success")
+
+    def pause(self) -> None:
+        if (not self.vm.running) or self._sim_paused:
+            return
+        self._sim_paused = True
+        self._sim_timer.stop()
+        self.btn_pause.setEnabled(False)
+        self.btn_resume.setEnabled(True)
+        self._set_status("模拟采集已暂停", "warning")
+
+    def resume(self) -> None:
+        if (not self.vm.running) or (not self._sim_paused):
+            return
+        self._sim_paused = False
+        self._sim_timer.start()
+        self.btn_pause.setEnabled(True)
+        self.btn_resume.setEnabled(False)
+        self._set_status("模拟采集中（已继续）", "warning")
 
     def _on_tick(self) -> None:
         self.vm.tick()
