@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import struct
+import time
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
@@ -74,7 +75,26 @@ class SerialTransport:
             port=self._port,
             baudrate=self._baudrate,
             timeout=self._timeout,
+            bytesize=serial.EIGHTBITS,
+            parity=serial.PARITY_NONE,
+            stopbits=serial.STOPBITS_ONE,
+            rtscts=False,
+            dsrdtr=False,
+            xonxoff=False,
         )
+        # 某些 CH340 设备在控制线未稳定前不会持续输出，主动设置一次并留出稳定时间。
+        try:
+            self._ser.setDTR(False)
+            self._ser.setRTS(False)
+            time.sleep(0.05)
+        except Exception:
+            pass
+        try:
+            # 清理打开前可能残留的缓存，避免旧数据干扰。
+            self._ser.reset_input_buffer()
+            self._ser.reset_output_buffer()
+        except Exception:
+            pass
 
     def close(self) -> None:
         if self._ser and self._ser.is_open:
@@ -89,10 +109,9 @@ class SerialTransport:
     def receive(self, size: int = 4096) -> bytes:
         if self._ser is None or not self._ser.is_open:
             return b""
-        waiting = self._ser.in_waiting
-        if waiting == 0:
-            return b""
-        return self._ser.read(min(waiting, size))
+        # 直接阻塞读（受 timeout 控制），兼容部分驱动 in_waiting 不更新的情况。
+        data = self._ser.read(size)
+        return data or b""
 
     # ── 额外便捷属性 ──────────────────────────────────────────────────────
 

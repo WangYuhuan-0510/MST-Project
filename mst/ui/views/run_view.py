@@ -43,12 +43,14 @@ from .ui_style import (
 # ── 串口相关（可选依赖，不影响模拟模式）─────────────────────────────────────
 try:
     from mst.device.serial_worker import SerialWorker
-    from mst.device.protocol import DataSample, N_CHANNELS
+    from mst.device.protocol import DataSample, MSTDataSample, N_CHANNELS
     from mst.device.transport import SerialTransport
     _SERIAL_AVAILABLE = True
 except ImportError:
     _SERIAL_AVAILABLE = False
     N_CHANNELS = 16
+    DataSample = object  # type: ignore[assignment]
+    MSTDataSample = object  # type: ignore[assignment]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -64,21 +66,85 @@ class _SerialBuffer:
         self.t_s:   deque = deque(maxlen=self.MAX_SAMPLES)
         self.traces: List[deque] = [deque(maxlen=self.MAX_SAMPLES) for _ in range(n_ch)]
         self.enabled_mask: List[bool] = [True] * n_ch
+        self._latest: List[float] = [0.0] * n_ch
+        self._dist_min: Optional[float] = None
+        self._dist_max: Optional[float] = None
+        self.frame_count: int = 0
+        self.last_t_ms: int = 0
+        self.last_dist: float = 0.0
+        self.last_fluo: float = 0.0
+        self.last_idx: int = -1
+        self.last_kind: str = "none"
 
     def append(self, sample) -> None:          # sample: DataSample
-        self.t_s.append(sample.t_ms / 1000.0)
-        for i, v in enumerate(sample.channels[:self.n_ch]):
-            self.traces[i].append(float(v))
+        # 兼容两种串口样本：
+        # 1) DataSample: 一帧包含全通道
+        # 2) MSTDataSample: 一帧只包含 distance/fluo 单点
+        if isinstance(sample, DataSample):
+            t_ms = int(sample.t_ms)
+            for i, v in enumerate(sample.channels[:self.n_ch]):
+                self._latest[i] = float(v)
+            self.last_kind = "multi"
+            self.last_idx = -1
+        elif _SERIAL_AVAILABLE and isinstance(sample, MSTDataSample):
+            t_ms = int(sample.t_ms)
+            dist = float(sample.distance)
+            self._dist_min = dist if self._dist_min is None else min(self._dist_min, dist)
+            self._dist_max = dist if self._dist_max is None else max(self._dist_max, dist)
+
+            # 兼容两类 distance：
+            # 1) 已经是索引（0~n_ch-1）；
+            # 2) 物理距离（如 mm），按观测范围动态归一化到索引。
+            if 0.0 <= dist <= float(self.n_ch - 1):
+                idx = int(round(dist))
+            elif self._dist_min is not None and self._dist_max is not None and self._dist_max > self._dist_min:
+                ratio = (dist - self._dist_min) / (self._dist_max - self._dist_min)
+                idx = int(round(ratio * (self.n_ch - 1)))
+            else:
+                idx = 0
+            if 0 <= idx < self.n_ch:
+                self._latest[idx] = float(sample.fluo)
+                self.last_kind = "mst"
+                self.last_idx = idx
+                self.last_dist = dist
+                self.last_fluo = float(sample.fluo)
+        else:
+            return
+
+        self.frame_count += 1
+        self.last_t_ms = t_ms
+        self.t_s.append(t_ms / 1000.0)
+        for i in range(self.n_ch):
+            self.traces[i].append(self._latest[i])
 
     def clear(self) -> None:
         self.t_s.clear()
         for d in self.traces:
             d.clear()
+        self._latest = [0.0] * self.n_ch
+        self._dist_min = None
+        self._dist_max = None
+        self.frame_count = 0
+        self.last_t_ms = 0
+        self.last_dist = 0.0
+        self.last_fluo = 0.0
+        self.last_idx = -1
+        self.last_kind = "none"
 
     def time_list(self)   -> List[float]:       return list(self.t_s)
     def trace_matrix(self) -> List[List[float]]: return [list(d) for d in self.traces]
     def scan_center(self) -> List[float]:
         return [d[-1] if d else 0.0 for d in self.traces]
+
+    def debug_snapshot(self) -> str:
+        dmin = "None" if self._dist_min is None else f"{self._dist_min:.3f}"
+        dmax = "None" if self._dist_max is None else f"{self._dist_max:.3f}"
+        return (
+            f"frames={self.frame_count} | kind={self.last_kind} | "
+            f"t_ms={self.last_t_ms} | dist={self.last_dist:.3f} | "
+            f"fluo={self.last_fluo:.1f} | idx={self.last_idx} | "
+            f"dist_range=[{dmin}, {dmax}]"
+        )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -109,6 +175,14 @@ class RunView(QWidget):
         # ── 串口模式 ─────────────────────────────────────────────────────
         self._serial_worker: Optional["SerialWorker"] = None
         self._serial_buf    = _SerialBuffer()
+        self._serial_error_count = 0
+        self._serial_last_error = ""
+        self._serial_rx_bytes = 0
+        self._serial_rx_chunks = 0
+        self._serial_ok_frames = 0
+        self._serial_bad_frames = 0
+        self._serial_last_chunk_hex = "-"
+        self._serial_port_echo = "-"
         self._render_timer  = QTimer(self)
         self._render_timer.setInterval(80)
         self._render_timer.timeout.connect(self._render_serial)
@@ -302,6 +376,10 @@ class RunView(QWidget):
         ser_ctrl.addWidget(self.lbl_ser_status)
 
         root.addWidget(self._ser_ctrl_card)
+        self.lbl_ser_debug = QLabel("调试：未开始接收串口数据")
+        self.lbl_ser_debug.setStyleSheet(label_style(11, 500, "text_muted"))
+        self.lbl_ser_debug.setVisible(False)
+        root.addWidget(self.lbl_ser_debug)
 
         # ── 三张图（两种模式共用）────────────────────────────────────────
         _gb = groupbox_style()
@@ -378,6 +456,7 @@ class RunView(QWidget):
         is_serial = (mode == "serial")
         self._sim_ctrl_card.setVisible(not is_serial)
         self._ser_ctrl_card.setVisible(is_serial)
+        self.lbl_ser_debug.setVisible(is_serial)
         self.btn_mode_sim.setChecked(not is_serial)
         self.btn_mode_ser.setChecked(is_serial)
         self._apply_mode_btn_style()
@@ -436,11 +515,21 @@ class RunView(QWidget):
         port = self.cmb_port.currentText().strip()
         baud = int(self.cmb_baud.currentText())
         self._serial_buf.clear()
+        self._serial_error_count = 0
+        self._serial_last_error = ""
+        self._serial_rx_bytes = 0
+        self._serial_rx_chunks = 0
+        self._serial_ok_frames = 0
+        self._serial_bad_frames = 0
+        self._serial_last_chunk_hex = "-"
+        self._serial_port_echo = "-"
+        self._update_serial_debug()
 
         self._serial_worker = SerialWorker(port=port, baudrate=baud, parent=self)
         self._serial_worker.data_ready.connect(self._on_serial_data)
         self._serial_worker.status_changed.connect(self._set_ser_status_ok)
         self._serial_worker.error_occurred.connect(self._set_ser_status_err)
+        self._serial_worker.debug_stats.connect(self._on_serial_debug_stats)
         self._serial_worker.finished.connect(self._on_serial_worker_finished)
         self._serial_worker.start()
 
@@ -457,6 +546,7 @@ class RunView(QWidget):
         self.btn_ser_connect.setEnabled(True)
         self.btn_ser_stop.setEnabled(False)
         self._set_ser_status("已断开", "text_muted")
+        self._update_serial_debug()
 
     def _on_serial_worker_finished(self) -> None:
         self._render_timer.stop()
@@ -468,18 +558,49 @@ class RunView(QWidget):
     @Slot(object)
     def _on_serial_data(self, sample) -> None:
         self._serial_buf.append(sample)
+        self._update_serial_debug()
 
     @Slot(str)
     def _set_ser_status_ok(self, msg: str) -> None:
         self._set_ser_status(msg, "success")
 
+    @Slot(object)
+    def _on_serial_debug_stats(self, stats: object) -> None:
+        if not isinstance(stats, dict):
+            return
+        self._serial_rx_bytes = int(stats.get("rx_bytes", 0))
+        self._serial_rx_chunks = int(stats.get("rx_chunks", 0))
+        self._serial_ok_frames = int(stats.get("ok_frames", 0))
+        self._serial_bad_frames = int(stats.get("bad_frames", 0))
+        self._serial_last_chunk_hex = str(stats.get("last_chunk_hex", "-"))
+        port = stats.get("port")
+        baudrate = stats.get("baudrate")
+        bytesize = stats.get("bytesize")
+        parity = stats.get("parity")
+        stopbits = stats.get("stopbits")
+        if port is not None:
+            self._serial_port_echo = f"{port}@{baudrate},{bytesize},{parity},{stopbits}"
+        self._update_serial_debug()
+
     @Slot(str)
     def _set_ser_status_err(self, msg: str) -> None:
+        self._serial_error_count += 1
+        self._serial_last_error = msg
         self._set_ser_status(f"⚠  {msg}", "danger")
+        self._update_serial_debug()
 
     def _set_ser_status(self, text: str, color_key: str = "text_muted") -> None:
         self.lbl_ser_status.setText(text)
         self.lbl_ser_status.setStyleSheet(label_style(12, 500, color_key))
+
+    def _update_serial_debug(self) -> None:
+        err = self._serial_last_error if self._serial_last_error else "-"
+        self.lbl_ser_debug.setText(
+            f"调试：{self._serial_buf.debug_snapshot()} | errors={self._serial_error_count} | "
+            f"last_err={err} | rx_bytes={self._serial_rx_bytes} | rx_chunks={self._serial_rx_chunks} | "
+            f"ok_frames={self._serial_ok_frames} | bad_frames={self._serial_bad_frames} | "
+            f"last_hex={self._serial_last_chunk_hex} | opened={self._serial_port_echo}"
+        )
 
     def _render_serial(self) -> None:
         """串口模式的定时刷新（替代 _on_tick）。"""
@@ -490,6 +611,7 @@ class RunView(QWidget):
         sel  = self.vm.selected_capillary   # 复用 VM 的选中状态
 
         if not t:
+            self._update_serial_debug()
             return
 
         self.plot_scan.set_scan(sc, enabled_mask=mask, selected_idx=sel)
@@ -516,6 +638,7 @@ class RunView(QWidget):
                 selected_idx=sel,
                 fit_curve=None,
             )
+        self._update_serial_debug()
 
     # ── Private helpers ───────────────────────────────────────────────────
 

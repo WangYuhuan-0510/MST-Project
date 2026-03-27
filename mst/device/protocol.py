@@ -12,7 +12,8 @@ CMD_START      = 0x01   # 主机 → STM32：开始采集
 CMD_STOP       = 0x02   # 主机 → STM32：停止采集
 CMD_ACK_START  = 0x81   # STM32 → 主机：开始确认
 CMD_ACK_STOP   = 0x82   # STM32 → 主机：停止确认
-CMD_DATA_FRAME = 0x10   # STM32 → 主机：荧光数据帧（主要数据命令）
+CMD_DATA_FRAME = 0x10   # STM32 → 主机：旧版多通道荧光数据帧（兼容保留）
+CMD_MST_DATA   = 0x15   # STM32 → 主机：MST 单点数据帧（当前使用）
 CMD_ERROR      = 0xFF   # STM32 → 主机：错误回包
 
 # ── 数据帧 PAYLOAD 格式（CMD=0x10）────────────────────────────────────────────
@@ -82,3 +83,30 @@ def build_start_frame() -> bytes:
 
 def build_stop_frame() -> bytes:
     return ProtocolFrame(command=CMD_STOP).to_bytes()
+
+@dataclass(frozen=True)
+class MSTDataSample:
+    """解析后的 MST 单点数据"""
+    t_ms:     int      # 时间戳 (毫秒)
+    distance: float    # 扫描距离 (还原后的小数)
+    fluo:     int      # 荧光强度
+    reserved: int      # 预留位数据
+
+def parse_mst_frame(frame: ProtocolFrame) -> MSTDataSample:
+    """
+    解析 CMD_MST_DATA 帧。
+    Payload 格式 (< 代表小端模式):
+      [I: uint32 t_ms] [H: uint16 pos] [H: uint16 fluo] [I: uint32 reserved]
+    """
+    if frame.command != CMD_MST_DATA:
+        raise ValueError(f"命令字错误：期望 0x{CMD_MST_DATA:02X}，实际 0x{frame.command:02X}")
+    if len(frame.payload) != 12:
+        raise ValueError(f"MST 数据帧 payload 长度不足：期望 12，实际 {len(frame.payload)}")
+    
+    # 使用 struct 解包：I=4字节无符号，H=2字节无符号
+    t_ms, pos_raw, fluo, reserved = struct.unpack_from("<I H H I", frame.payload, 0)
+    
+    # 还原距离数据
+    distance = pos_raw / 100.0
+    
+    return MSTDataSample(t_ms=t_ms, distance=distance, fluo=fluo, reserved=reserved)

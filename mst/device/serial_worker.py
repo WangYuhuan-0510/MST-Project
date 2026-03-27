@@ -22,9 +22,14 @@ from typing import List
 from PySide6.QtCore import QThread, Signal
 
 from .protocol import (
-    HEADER, CMD_DATA_FRAME, N_CHANNELS,
-    ProtocolFrame, DataSample, parse_data_frame,
-    build_start_frame, build_stop_frame,
+    HEADER,    
+    CMD_DATA_FRAME,   #0x15
+    CMD_MST_DATA,
+    ProtocolFrame,
+    parse_data_frame,
+    parse_mst_frame,
+    build_start_frame,
+    build_stop_frame,
 )
 from .transport import SerialTransport
 
@@ -42,6 +47,7 @@ class SerialWorker(QThread):
     data_ready      = Signal(object)   # DataSample
     status_changed  = Signal(str)      # "连接成功" / "已断开" 等
     error_occurred  = Signal(str)      # 错误描述字符串
+    debug_stats     = Signal(object)   # 串口底层统计信息(dict)
 
     def __init__(self, port: str = "COM3",
                  baudrate: int = 115200,
@@ -51,6 +57,11 @@ class SerialWorker(QThread):
         self._baudrate = baudrate
         self._running  = False
         self._transport: SerialTransport | None = None
+        self._rx_bytes = 0
+        self._rx_chunks = 0
+        self._ok_frames = 0
+        self._bad_frames = 0
+        self._last_chunk_hex = "-"
 
     # ── 公共控制接口 ──────────────────────────────────────────────────────
 
@@ -72,7 +83,25 @@ class SerialWorker(QThread):
 
         self._transport = transport
         self._running   = True
+        self._rx_bytes = 0
+        self._rx_chunks = 0
+        self._ok_frames = 0
+        self._bad_frames = 0
+        self._last_chunk_hex = "-"
         self.status_changed.emit(f"已连接到 {self._port}，波特率 {self._baudrate}")
+        try:
+            ser = getattr(transport, "_ser", None)
+            if ser is not None:
+                self.debug_stats.emit({
+                    **self._snapshot_stats(),
+                    "port": str(getattr(ser, "port", self._port)),
+                    "baudrate": int(getattr(ser, "baudrate", self._baudrate)),
+                    "bytesize": int(getattr(ser, "bytesize", 8)),
+                    "parity": str(getattr(ser, "parity", "N")),
+                    "stopbits": str(getattr(ser, "stopbits", 1)),
+                })
+        except Exception:
+            pass
 
         # 2. 发送启动命令
         try:
@@ -88,6 +117,10 @@ class SerialWorker(QThread):
             while self._running:
                 chunk = transport.receive(256)
                 if chunk:
+                    self._rx_chunks += 1
+                    self._rx_bytes += len(chunk)
+                    self._last_chunk_hex = chunk[:16].hex(" ")
+                    self.debug_stats.emit(self._snapshot_stats())
                     rx_buf.extend(chunk)
                     rx_buf = self._process_buffer(rx_buf)
                 else:
@@ -132,13 +165,38 @@ class SerialWorker(QThread):
                 frame = ProtocolFrame.parse(raw)
             except ValueError:
                 # 帧校验失败，丢弃这一帧继续
+                self._bad_frames += 1
+                self.debug_stats.emit(self._snapshot_stats())
                 continue
 
-            if frame.command == CMD_DATA_FRAME:
+            if frame.command == CMD_MST_DATA:
                 try:
-                    sample = parse_data_frame(frame)
+                    sample = parse_mst_frame(frame)
+                    self._ok_frames += 1
+                    self.debug_stats.emit(self._snapshot_stats())
                     self.data_ready.emit(sample)
                 except ValueError as e:
+                    self._bad_frames += 1
+                    self.debug_stats.emit(self._snapshot_stats())
+                    self.error_occurred.emit(f"MST数据帧解析失败：{e}")
+            elif frame.command == CMD_DATA_FRAME:
+                try:
+                    sample = parse_data_frame(frame)
+                    self._ok_frames += 1
+                    self.debug_stats.emit(self._snapshot_stats())
+                    self.data_ready.emit(sample)
+                except ValueError as e:
+                    self._bad_frames += 1
+                    self.debug_stats.emit(self._snapshot_stats())
                     self.error_occurred.emit(f"数据帧解析失败：{e}")
 
         return buf
+
+    def _snapshot_stats(self) -> dict:
+        return {
+            "rx_bytes": int(self._rx_bytes),
+            "rx_chunks": int(self._rx_chunks),
+            "ok_frames": int(self._ok_frames),
+            "bad_frames": int(self._bad_frames),
+            "last_chunk_hex": self._last_chunk_hex,
+        }
