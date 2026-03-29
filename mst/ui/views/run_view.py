@@ -63,10 +63,13 @@ class _SerialBuffer:
 
     def __init__(self, n_ch: int = N_CHANNELS) -> None:
         self.n_ch         = n_ch
-        self.t_s:   deque = deque(maxlen=self.MAX_SAMPLES)
+        self.t_s:   deque = deque(maxlen=self.MAX_SAMPLES)  # 兼容旧数据流
         self.traces: List[deque] = [deque(maxlen=self.MAX_SAMPLES) for _ in range(n_ch)]
+        self.mst_t_s: deque = deque(maxlen=self.MAX_SAMPLES)
+        self.mst_traces: List[deque] = [deque(maxlen=self.MAX_SAMPLES) for _ in range(n_ch)]
         self.enabled_mask: List[bool] = [True] * n_ch
-        self._latest: List[float] = [0.0] * n_ch
+        self._latest: List[float] = [0.0] * n_ch         # 兼容旧数据流
+        self._scan_latest: List[float] = [0.0] * n_ch    # 扫描图使用
         self._dist_min: Optional[float] = None
         self._dist_max: Optional[float] = None
         self.frame_count: int = 0
@@ -75,6 +78,9 @@ class _SerialBuffer:
         self.last_fluo: float = 0.0
         self.last_idx: int = -1
         self.last_kind: str = "none"
+        self.phase: str = "SCAN"
+        self._ir_seen: bool = False
+        self._mst_t0_ms: int = 0
 
     def append(self, sample) -> None:          # sample: DataSample
         # 兼容两种串口样本：
@@ -103,11 +109,18 @@ class _SerialBuffer:
             else:
                 idx = 0
             if 0 <= idx < self.n_ch:
-                self._latest[idx] = float(sample.fluo)
+                self._scan_latest[idx] = float(sample.fluo)
                 self.last_kind = "mst"
                 self.last_idx = idx
                 self.last_dist = dist
                 self.last_fluo = float(sample.fluo)
+                if bool(getattr(sample, "ir_on", False)):
+                    self._enter_mst_if_needed(t_ms)
+                    self.mst_traces[idx].append(float(sample.fluo))
+                    self.mst_t_s.append((t_ms - self._mst_t0_ms) / 1000.0)
+                    self.phase = "MST"
+                else:
+                    self.phase = "SCAN"
         else:
             return
 
@@ -122,6 +135,7 @@ class _SerialBuffer:
         for d in self.traces:
             d.clear()
         self._latest = [0.0] * self.n_ch
+        self._scan_latest = [0.0] * self.n_ch
         self._dist_min = None
         self._dist_max = None
         self.frame_count = 0
@@ -130,10 +144,35 @@ class _SerialBuffer:
         self.last_fluo = 0.0
         self.last_idx = -1
         self.last_kind = "none"
+        self.phase = "SCAN"
+        self._ir_seen = False
+        self._mst_t0_ms = 0
+        self.mst_t_s.clear()
+        for d in self.mst_traces:
+            d.clear()
 
-    def time_list(self)   -> List[float]:       return list(self.t_s)
-    def trace_matrix(self) -> List[List[float]]: return [list(d) for d in self.traces]
+    def _enter_mst_if_needed(self, t_ms: int) -> None:
+        if self._ir_seen:
+            return
+        self._ir_seen = True
+        self._mst_t0_ms = int(t_ms)
+        self.mst_t_s.clear()
+        for d in self.mst_traces:
+            d.clear()
+
+    def time_list(self) -> List[float]:
+        if self._ir_seen:
+            return list(self.mst_t_s)
+        return []
+
+    def trace_matrix(self) -> List[List[float]]:
+        if self._ir_seen:
+            return [list(d) for d in self.mst_traces]
+        return [[] for _ in range(self.n_ch)]
+
     def scan_center(self) -> List[float]:
+        if self.last_kind == "mst":
+            return list(self._scan_latest)
         return [d[-1] if d else 0.0 for d in self.traces]
 
     def debug_snapshot(self) -> str:
@@ -143,7 +182,7 @@ class _SerialBuffer:
             f"frames={self.frame_count} | kind={self.last_kind} | "
             f"t_ms={self.last_t_ms} | dist={self.last_dist:.3f} | "
             f"fluo={self.last_fluo:.1f} | idx={self.last_idx} | "
-            f"dist_range=[{dmin}, {dmax}]"
+            f"phase={self.phase} | dist_range=[{dmin}, {dmax}]"
         )
 
 
@@ -670,12 +709,29 @@ class RunView(QWidget):
         sc  = self._serial_buf.scan_center()
         mask = self._serial_buf.enabled_mask
         sel  = self.vm.selected_capillary   # 复用 VM 的选中状态
+        if self._serial_buf.phase == "SCAN":
+            self._set_ser_status("串口采集中：毛细管扫描阶段（IR 关闭）", "warning")
+        else:
+            self._set_ser_status("串口采集中：MST 阶段（IR 已开启）", "success")
 
+        self.plot_scan.set_scan(sc, enabled_mask=mask, selected_idx=sel)
         if not t:
+            self.plot_trace.set_traces(
+                [], [[] for _ in range(len(mask))],
+                enabled_mask=mask,
+                selected_idx=sel,
+                t_ir_on_s=0.0,
+                t1_s=self.spin_t1_ser.value(),
+            )
+            self.plot_dose.set_data(
+                list(range(len(mask))), [0.0 for _ in range(len(mask))],
+                enabled_mask=mask,
+                selected_idx=sel,
+                fit_curve=None,
+            )
             self._update_serial_debug()
             return
 
-        self.plot_scan.set_scan(sc, enabled_mask=mask, selected_idx=sel)
         self.plot_trace.set_traces(
             t, mat,
             enabled_mask=mask,

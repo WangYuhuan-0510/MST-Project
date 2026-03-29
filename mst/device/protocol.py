@@ -91,6 +91,7 @@ class MSTDataSample:
     distance: float    # 扫描距离 (还原后的小数)
     fluo:     int      # 荧光强度
     reserved: int      # 预留位数据
+    ir_on:    bool     # IR 状态（reserved bit0）
 
 def parse_mst_frame(frame: ProtocolFrame) -> MSTDataSample:
     """
@@ -109,4 +110,11 @@ def parse_mst_frame(frame: ProtocolFrame) -> MSTDataSample:
     # 还原距离数据
     distance = pos_raw / 100.0
     
-    return MSTDataSample(t_ms=t_ms, distance=distance, fluo=fluo, reserved=reserved)
+    ir_on = bool(reserved & 0x01)
+    return MSTDataSample(
+        t_ms=t_ms,
+        distance=distance,
+        fluo=fluo,
+        reserved=reserved,
+        ir_on=ir_on,
+    )
