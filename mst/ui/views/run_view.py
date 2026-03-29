@@ -60,16 +60,18 @@ except ImportError:
 class _SerialBuffer:
     """接收并缓存串口采样，提供与 RunAnalysisViewModel 相同接口的数据视图。"""
     MAX_SAMPLES = 3000
+    # 与 STM32 MST_PREHEAT_S 一致：预热段横轴为 [-PREHEAT, 0)，IR 在 t=0
+    MST_PREHEAT_S = 5.0
 
     def __init__(self, n_ch: int = N_CHANNELS) -> None:
         self.n_ch         = n_ch
-        self.t_s:   deque = deque(maxlen=self.MAX_SAMPLES)  # 兼容旧数据流
+        self.t_s:   deque = deque(maxlen=self.MAX_SAMPLES)  # 仅 DataSample 多通道模式
         self.traces: List[deque] = [deque(maxlen=self.MAX_SAMPLES) for _ in range(n_ch)]
-        self.mst_t_s: deque = deque(maxlen=self.MAX_SAMPLES)
         self.mst_traces: List[deque] = [deque(maxlen=self.MAX_SAMPLES) for _ in range(n_ch)]
+        self.mst_t_by_ch: List[deque] = [deque(maxlen=self.MAX_SAMPLES) for _ in range(n_ch)]
         self.enabled_mask: List[bool] = [True] * n_ch
-        self._latest: List[float] = [0.0] * n_ch         # 兼容旧数据流
-        self._scan_latest: List[float] = [0.0] * n_ch    # 扫描图使用
+        self._latest: List[float] = [0.0] * n_ch
+        self._scan_latest: List[float] = [0.0] * n_ch
         self._dist_min: Optional[float] = None
         self._dist_max: Optional[float] = None
         self.frame_count: int = 0
@@ -79,28 +81,60 @@ class _SerialBuffer:
         self.last_idx: int = -1
         self.last_kind: str = "none"
         self.phase: str = "SCAN"
+        self._mst_stream_active: bool = False
         self._ir_seen: bool = False
+        self._mst_preheat_axis: bool = False
         self._mst_t0_ms: int = 0
 
+    def _clear_mst_series(self) -> None:
+        for d in self.mst_traces:
+            d.clear()
+        for d in self.mst_t_by_ch:
+            d.clear()
+
+    def _enter_mst_stream(self, t_ms: int) -> None:
+        if self._mst_stream_active:
+            return
+        self._mst_stream_active = True
+        self._mst_preheat_axis = True
+        self._mst_t0_ms = int(t_ms)
+        self._clear_mst_series()
+
+    def _enter_mst_legacy_ir(self, t_ms: int) -> None:
+        if self._ir_seen:
+            return
+        self._ir_seen = True
+        self._mst_preheat_axis = False
+        self._mst_t0_ms = int(t_ms)
+        self._clear_mst_series()
+
+    def _mst_time_s(self, t_ms: int) -> float:
+        dt = (int(t_ms) - self._mst_t0_ms) / 1000.0
+        if self._mst_preheat_axis:
+            return dt - self.MST_PREHEAT_S
+        return dt
+
     def append(self, sample) -> None:          # sample: DataSample
+        legacy_append = False
         # 兼容两种串口样本：
         # 1) DataSample: 一帧包含全通道
-        # 2) MSTDataSample: 一帧只包含 distance/fluo 单点
+        # 2) MSTDataSample: 单点；reserved bit1=mst_stream（含预热），bit0=ir_on
         if isinstance(sample, DataSample):
             t_ms = int(sample.t_ms)
             for i, v in enumerate(sample.channels[:self.n_ch]):
                 self._latest[i] = float(v)
             self.last_kind = "multi"
             self.last_idx = -1
+            legacy_append = True
         elif _SERIAL_AVAILABLE and isinstance(sample, MSTDataSample):
             t_ms = int(sample.t_ms)
             dist = float(sample.distance)
+            ir_on = bool(getattr(sample, "ir_on", False))
+            mst_stream = bool(getattr(sample, "mst_stream", False))
+
             self._dist_min = dist if self._dist_min is None else min(self._dist_min, dist)
             self._dist_max = dist if self._dist_max is None else max(self._dist_max, dist)
 
-            # 兼容两类 distance：
-            # 1) 已经是索引（0~n_ch-1）；
-            # 2) 物理距离（如 mm），按观测范围动态归一化到索引。
             if 0.0 <= dist <= float(self.n_ch - 1):
                 idx = int(round(dist))
             elif self._dist_min is not None and self._dist_max is not None and self._dist_max > self._dist_min:
@@ -109,26 +143,35 @@ class _SerialBuffer:
             else:
                 idx = 0
             if 0 <= idx < self.n_ch:
-                self._scan_latest[idx] = float(sample.fluo)
                 self.last_kind = "mst"
                 self.last_idx = idx
                 self.last_dist = dist
                 self.last_fluo = float(sample.fluo)
-                if bool(getattr(sample, "ir_on", False)):
-                    self._enter_mst_if_needed(t_ms)
-                    self.mst_traces[idx].append(float(sample.fluo))
-                    self.mst_t_s.append((t_ms - self._mst_t0_ms) / 1000.0)
-                    self.phase = "MST"
-                else:
+
+                if not mst_stream:
+                    self._scan_latest[idx] = float(sample.fluo)
                     self.phase = "SCAN"
+                else:
+                    self.phase = "MST_IR" if ir_on else "MST_PRE"
+
+                if mst_stream:
+                    self._enter_mst_stream(t_ms)
+                elif ir_on:
+                    self._enter_mst_legacy_ir(t_ms)
+
+                if mst_stream or ir_on:
+                    t_plot = self._mst_time_s(t_ms)
+                    self.mst_traces[idx].append(float(sample.fluo))
+                    self.mst_t_by_ch[idx].append(t_plot)
         else:
             return
 
         self.frame_count += 1
         self.last_t_ms = t_ms
-        self.t_s.append(t_ms / 1000.0)
-        for i in range(self.n_ch):
-            self.traces[i].append(self._latest[i])
+        if legacy_append:
+            self.t_s.append(t_ms / 1000.0)
+            for i in range(self.n_ch):
+                self.traces[i].append(self._latest[i])
 
     def clear(self) -> None:
         self.t_s.clear()
@@ -145,30 +188,41 @@ class _SerialBuffer:
         self.last_idx = -1
         self.last_kind = "none"
         self.phase = "SCAN"
+        self._mst_stream_active = False
         self._ir_seen = False
+        self._mst_preheat_axis = False
         self._mst_t0_ms = 0
-        self.mst_t_s.clear()
-        for d in self.mst_traces:
-            d.clear()
+        self._clear_mst_series()
 
-    def _enter_mst_if_needed(self, t_ms: int) -> None:
-        if self._ir_seen:
-            return
-        self._ir_seen = True
-        self._mst_t0_ms = int(t_ms)
-        self.mst_t_s.clear()
-        for d in self.mst_traces:
-            d.clear()
+    def has_mst_data(self) -> bool:
+        return self._mst_stream_active or self._ir_seen or any(len(d) > 0 for d in self.mst_traces)
 
     def time_list(self) -> List[float]:
-        if self._ir_seen:
-            return list(self.mst_t_s)
+        for d in self.mst_t_by_ch:
+            if d:
+                return list(d)
         return []
 
+    def mst_times_per_channel(self) -> List[List[float]]:
+        return [list(d) for d in self.mst_t_by_ch]
+
     def trace_matrix(self) -> List[List[float]]:
-        if self._ir_seen:
+        if self.has_mst_data():
             return [list(d) for d in self.mst_traces]
         return [[] for _ in range(self.n_ch)]
+
+    def dose_y_at_t1(self, t1_s: float) -> List[float]:
+        out: List[float] = []
+        for i in range(self.n_ch):
+            ts = list(self.mst_t_by_ch[i])
+            ys = list(self.mst_traces[i])
+            if not ts or not ys:
+                out.append(0.0)
+                continue
+            n = min(len(ts), len(ys))
+            best_j = min(range(n), key=lambda k: abs(ts[k] - t1_s))
+            out.append(ys[best_j])
+        return out
 
     def scan_center(self) -> List[float]:
         if self.last_kind == "mst":
@@ -709,19 +763,24 @@ class RunView(QWidget):
         sc  = self._serial_buf.scan_center()
         mask = self._serial_buf.enabled_mask
         sel  = self.vm.selected_capillary   # 复用 VM 的选中状态
-        if self._serial_buf.phase == "SCAN":
-            self._set_ser_status("串口采集中：毛细管扫描阶段（IR 关闭）", "warning")
+        ph = self._serial_buf.phase
+        if ph == "SCAN":
+            self._set_ser_status("串口采集中：毛细管扫描（IR 关闭）", "warning")
+        elif ph == "MST_PRE":
+            self._set_ser_status("串口采集中：MST 预热（-5s~0s，IR 未开）", "warning")
         else:
-            self._set_ser_status("串口采集中：MST 阶段（IR 已开启）", "success")
+            self._set_ser_status("串口采集中：MST 加热（IR 已开）", "success")
 
         self.plot_scan.set_scan(sc, enabled_mask=mask, selected_idx=sel)
-        if not t:
+        t_per = self._serial_buf.mst_times_per_channel()
+        if not self._serial_buf.has_mst_data():
             self.plot_trace.set_traces(
                 [], [[] for _ in range(len(mask))],
                 enabled_mask=mask,
                 selected_idx=sel,
                 t_ir_on_s=0.0,
                 t1_s=self.spin_t1_ser.value(),
+                t_per_trace=None,
             )
             self.plot_dose.set_data(
                 list(range(len(mask))), [0.0 for _ in range(len(mask))],
@@ -738,23 +797,16 @@ class RunView(QWidget):
             selected_idx=sel,
             t_ir_on_s=0.0,
             t1_s=self.spin_t1_ser.value(),
+            t_per_trace=t_per,
         )
-        # 剂量响应：用 T1 时刻各通道值
-        if len(t) >= 2:
-            dt = t[1] - t[0]
-            t1_s = self.spin_t1_ser.value()
-            if dt > 0:
-                t1_idx = max(0, min(int((t1_s - t[0]) / dt), len(t) - 1))
-            else:
-                t1_idx = 0
-            y_t1 = [mat[i][t1_idx] if len(mat[i]) > t1_idx else 0.0
-                    for i in range(len(mat))]
-            self.plot_dose.set_data(
-                list(range(len(mat))), y_t1,
-                enabled_mask=mask,
-                selected_idx=sel,
-                fit_curve=None,
-            )
+        t1_s = self.spin_t1_ser.value()
+        y_t1 = self._serial_buf.dose_y_at_t1(t1_s)
+        self.plot_dose.set_data(
+            list(range(len(mat))), y_t1,
+            enabled_mask=mask,
+            selected_idx=sel,
+            fit_curve=None,
+        )
         self._update_serial_debug()
 
     # ── Private helpers ───────────────────────────────────────────────────
@@ -869,13 +921,16 @@ class RunView(QWidget):
     def _open_review(self, target: str) -> None:
         serial_snapshot: Optional[Dict[str, Any]] = None
         if self._mode == "serial":
+            t1v = float(self.spin_t1_ser.value())
             serial_snapshot = {
                 "t": self._serial_buf.time_list(),
                 "mat": self._serial_buf.trace_matrix(),
+                "t_per_trace": self._serial_buf.mst_times_per_channel(),
                 "sc": self._serial_buf.scan_center(),
                 "mask": list(self._serial_buf.enabled_mask),
                 "sel": self.vm.selected_capillary,
-                "t1": float(self.spin_t1_ser.value()),
+                "t1": t1v,
+                "dose_y": self._serial_buf.dose_y_at_t1(t1v),
             }
         dlg = _ReviewDialog(self, self.vm, target=target, serial_snapshot=serial_snapshot)
         dlg.exec()
@@ -953,6 +1008,7 @@ class _ReviewDialog(QDialog):
         super().closeEvent(event)
 
     def _render(self) -> None:
+        t_per_trace = None
         if self._serial_snapshot is None:
             sc = self._vm.scan_center
             mask = self._vm.enabled_mask
@@ -972,17 +1028,20 @@ class _ReviewDialog(QDialog):
             sel = self._serial_snapshot["sel"]
             t = self._serial_snapshot["t"]
             mat = self._serial_snapshot["mat"]
+            t_per_trace = self._serial_snapshot.get("t_per_trace")
             t_ir = 0.0
             t1 = self._serial_snapshot["t1"]
-            if len(t) >= 2:
-                dt = t[1] - t[0]
-                if dt > 0:
-                    t1_idx = max(0, min(int((t1 - t[0]) / dt), len(t) - 1))
+            feat = self._serial_snapshot.get("dose_y")
+            if feat is None:
+                if len(t) >= 2:
+                    dt = t[1] - t[0]
+                    if dt > 0:
+                        t1_idx = max(0, min(int((t1 - t[0]) / dt), len(t) - 1))
+                    else:
+                        t1_idx = 0
+                    feat = [mat[i][t1_idx] if len(mat[i]) > t1_idx else 0.0 for i in range(len(mat))]
                 else:
-                    t1_idx = 0
-                feat = [mat[i][t1_idx] if len(mat[i]) > t1_idx else 0.0 for i in range(len(mat))]
-            else:
-                feat = [0.0 for _ in range(len(mat))]
+                    feat = [0.0 for _ in range(len(mat))]
             conc = list(range(len(mat)))
             fit_curve = None
 
@@ -995,6 +1054,7 @@ class _ReviewDialog(QDialog):
                 selected_idx=sel,
                 t_ir_on_s=t_ir,
                 t1_s=t1,
+                t_per_trace=t_per_trace,
             )
         if self.plot_dose is not None:
             self.plot_dose.set_data(

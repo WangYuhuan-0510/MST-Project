@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Optional, Sequence
 
 import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
@@ -50,6 +50,7 @@ class MSTTracePlot(QWidget):
         selected_idx: Optional[int] = None,
         t_ir_on_s: float = 0.0,
         t1_s: float = 2.0,
+        t_per_trace: Optional[Sequence[Sequence[float]]] = None,
     ) -> None:
         ts = list(t)
         n = len(traces)
@@ -82,6 +83,11 @@ class MSTTracePlot(QWidget):
                 color = "#1f77b4"
                 alpha = 0.35
                 lw = 1.0
+            if t_per_trace is not None and i < len(t_per_trace):
+                t_i = list(t_per_trace[i])
+                if t_i:
+                    self._ax.plot(t_i[: len(ys)], ys, color=color, alpha=alpha, lw=lw)
+                    continue
             self._ax.plot(ts[: len(ys)], ys, color=color, alpha=alpha, lw=lw)
 
         self._ax.axvline(float(t_ir_on_s), color="#d62728", lw=1.2, ls="--")
