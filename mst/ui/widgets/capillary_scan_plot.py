@@ -14,10 +14,10 @@ from mst.device.protocol import MSTDataSample
 class CapillaryScanPlot(QWidget):
     point_clicked = Signal(int)
 
-    X_MIN = 0.0
-    X_MAX = 15.0
     N_CAPS = 16
-    CAP_WIDTH = (X_MAX - X_MIN) / N_CAPS
+    INDEX_MIN = 1.0
+    INDEX_MAX = 16.0
+    RAW_BASELINE_MIN = 20.0  # 去除 0~20 的突兀底噪段
 
     def __init__(self, parent=None, *, enable_zoom: bool = False) -> None:
         super().__init__(parent)
@@ -36,48 +36,43 @@ class CapillaryScanPlot(QWidget):
         self._selected_idx: Optional[int] = None
         self._enabled_mask: Optional[List[bool]] = None
 
-        # 当前显示的扫描原始点（严格按串口原始数据）
+        # 当前显示曲线（x 轴统一为 1~16 索引坐标）
         self._scan_xs: List[float] = []
         self._scan_ys: List[float] = []
-
-        # 每通道峰值标记（由原始点统计得到）
-        self._cap_peaks: List[float] = [0.0] * self.N_CAPS
-        self._cap_peak_x: List[float] = [
-            self.X_MIN + (i + 0.5) * self.CAP_WIDTH for i in range(self.N_CAPS)
-        ]
 
         self._frozen: bool = False
 
         self._canvas.mpl_connect("button_press_event", self._on_click)
         self._redraw()
 
+    def _to_index_x(self, distance_x: float) -> float:
+        """将串口距离坐标（0~15）映射到索引坐标（1~16）。"""
+        return float(distance_x) + 1.0
+
     def _init_axes(self) -> None:
         self._ax.set_title("Capillary Scan (Raw Serial Data)")
-        self._ax.set_xlabel("Scan Position")
+        self._ax.set_xlabel("Capillary Index")
         self._ax.set_ylabel("Signal Intensity")
-        self._ax.set_xlim(self.X_MIN - 0.3, self.X_MAX + 0.3)
-        self._ax.set_ylim(0, 130)
+        self._ax.set_xlim(0.5, 16.5)
+        self._ax.set_ylim(0, 180)
+        self._ax.set_xticks(list(range(1, self.N_CAPS + 1)))
         self._ax.grid(True, alpha=0.25)
-
-    def _recompute_peaks_from_raw(self) -> None:
-        self._cap_peaks = [0.0] * self.N_CAPS
-        for x, y in zip(self._scan_xs, self._scan_ys):
-            ch = int((x - self.X_MIN) / self.CAP_WIDTH)
-            if 0 <= ch < self.N_CAPS and y > self._cap_peaks[ch]:
-                self._cap_peaks[ch] = y
 
     @Slot(object)
     def handle_sample(self, sample: MSTDataSample) -> None:
-        """兼容直接单点喂入：仅用于原始串口扫描帧。"""
         if sample.mst_stream:
             self.freeze()
             return
         if self._frozen:
             return
 
-        self._scan_xs.append(float(sample.distance))
-        self._scan_ys.append(float(sample.fluo))
-        self._recompute_peaks_from_raw()
+        x = self._to_index_x(float(sample.distance))
+        y = float(sample.fluo)
+        if y < self.RAW_BASELINE_MIN:
+            return
+
+        self._scan_xs.append(x)
+        self._scan_ys.append(y)
         self._redraw()
 
     def freeze(self) -> None:
@@ -86,11 +81,9 @@ class CapillaryScanPlot(QWidget):
 
     def set_selection(self, idx: Optional[int]) -> None:
         self._selected_idx = idx
-        self._redraw()
 
     def set_enabled_mask(self, mask: List[bool]) -> None:
         self._enabled_mask = mask
-        self._redraw()
 
     def set_raw_scan(
         self,
@@ -100,14 +93,23 @@ class CapillaryScanPlot(QWidget):
         selected_idx: Optional[int] = None,
         frozen: bool = False,
     ) -> None:
-        """按原始串口扫描点绘制，不做任何高斯合成。"""
+        """按串口原始扫描点绘制；过滤 0~20 低值段；峰顶显示到 1~16 索引。"""
         n = min(len(xs), len(ys))
-        self._scan_xs = [float(v) for v in xs[:n]]
-        self._scan_ys = [float(v) for v in ys[:n]]
+        fx: List[float] = []
+        fy: List[float] = []
+        for i in range(n):
+            x = self._to_index_x(float(xs[i]))
+            y = float(ys[i])
+            if y < self.RAW_BASELINE_MIN:
+                continue
+            fx.append(x)
+            fy.append(y)
+
+        self._scan_xs = fx
+        self._scan_ys = fy
         self._enabled_mask = enabled_mask
         self._selected_idx = selected_idx
         self._frozen = bool(frozen)
-        self._recompute_peaks_from_raw()
         self._redraw()
 
     def set_scan(
@@ -116,10 +118,7 @@ class CapillaryScanPlot(QWidget):
         enabled_mask: Optional[List[bool]] = None,
         selected_idx: Optional[int] = None,
     ) -> None:
-        """
-        兼容旧接口（模拟模式）：由 16 通道强度合成高斯峰。
-        串口模式请使用 set_raw_scan()。
-        """
+        """兼容模拟模式：16 通道强度合成高斯峰，峰顶与索引 1~16 对齐。"""
         ys = [float(v) for v in y_center][: self.N_CAPS]
         if len(ys) < self.N_CAPS:
             ys.extend([0.0] * (self.N_CAPS - len(ys)))
@@ -127,13 +126,12 @@ class CapillaryScanPlot(QWidget):
         self._enabled_mask = enabled_mask
         self._selected_idx = selected_idx
         self._frozen = True
-        self._cap_peaks = ys
 
-        sigma = self.CAP_WIDTH * 0.16
-        x_dense = np.linspace(self.X_MIN, self.X_MAX, 500)
+        sigma = 0.16
+        x_dense = np.linspace(0.5, 16.5, 600)
         y_dense = np.zeros_like(x_dense)
         for i, amp in enumerate(ys):
-            mu = self.X_MIN + (i + 0.5) * self.CAP_WIDTH
+            mu = float(i + 1)  # 关键：峰顶与 1~16 索引严格对齐
             y_dense += amp * np.exp(-((x_dense - mu) ** 2) / (2 * sigma * sigma))
 
         self._scan_xs = x_dense.tolist()
@@ -147,27 +145,12 @@ class CapillaryScanPlot(QWidget):
         if self._scan_xs:
             self._ax.plot(self._scan_xs, self._scan_ys, color="#1f77b4", lw=1.2, alpha=0.85)
 
-        mask = self._enabled_mask or [True] * self.N_CAPS
-        for i in range(self.N_CAPS):
-            py = self._cap_peaks[i]
-            if py < 1.0:
-                continue
-
-            px = self._cap_peak_x[i]
-            if not mask[i]:
-                color, ec, sz = "#c7c7c7", "#999999", 25
-            elif self._selected_idx is not None and i == self._selected_idx:
-                color, ec, sz = "#2ca02c", "#2ca02c", 60
-            else:
-                color, ec, sz = "white", "black", 30
-
-            self._ax.scatter(px, py, color=color, edgecolors=ec, s=sz, zorder=4)
-
         self._canvas.draw_idle()
 
     def _on_click(self, event) -> None:
         if event.inaxes != self._ax or event.xdata is None:
             return
-        ch = int((float(event.xdata) - self.X_MIN) / self.CAP_WIDTH)
-        if 0 <= ch < self.N_CAPS:
-            self.point_clicked.emit(ch)
+        # 将 1~16 映射回 0~15 的通道索引
+        idx = int(round(float(event.xdata))) - 1
+        if 0 <= idx < self.N_CAPS:
+            self.point_clicked.emit(idx)
