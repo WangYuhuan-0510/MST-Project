@@ -1,0 +1,57 @@
+clc; clear; close all;
+
+%% 参数
+num_capillaries = 16;   % 毛细管数量
+points_per_cap = 100;   % 每根毛细管点数
+gap = 40;               % ⭐间隙（越大断开越明显）
+
+sigma = 15;             % 高斯宽度
+amplitude = 120;        % 峰高
+baseline = 18;          % 底部水平
+
+%% 初始化
+total_points = num_capillaries * (points_per_cap + gap);
+x = 1:total_points;
+y = nan(size(x));   % ⭐关键：用NaN实现“断开”
+
+%% 生成每根毛细管
+current_idx = 1;
+
+for i = 1:num_capillaries
+    
+    % 当前区间
+    idx = current_idx : current_idx + points_per_cap - 1;
+    
+    % 局部坐标
+    local_x = linspace(-3*sigma, 3*sigma, points_per_cap);
+    
+    % 高斯峰
+    peak = amplitude * exp(-local_x.^2 / (2*sigma^2));
+    
+    % 加 baseline
+    signal = peak + baseline;
+    
+    % ⭐关键：底部截平（保证“平底”）
+    signal(signal < baseline) = baseline;
+    
+    % 写入
+    y(idx) = signal;
+    
+    % 更新位置（留gap）
+    current_idx = current_idx + points_per_cap + gap;
+end
+
+%% 绘图
+figure;
+plot(x, y, 'Color', [0 0.6 0.3], 'LineWidth', 1.5);
+hold on;
+
+yline(baseline, '--r');
+
+xlabel('Scan Position');
+ylabel('Fluorescence');
+title('Separated Capillary Gaussian Peaks');
+
+grid on;
+xlim([0 total_points]);
+ylim([0 amplitude + baseline + 20]);
