@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from typing import Iterable, List, Optional
-import numpy as np
+from typing import Iterable, List, Optional, Sequence
 
+import numpy as np
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from PySide6.QtCore import Signal, Slot
@@ -10,8 +10,14 @@ from PySide6.QtWidgets import QWidget, QVBoxLayout
 
 from mst.device.protocol import MSTDataSample
 
+
 class CapillaryScanPlot(QWidget):
     point_clicked = Signal(int)
+
+    X_MIN = 0.0
+    X_MAX = 15.0
+    N_CAPS = 16
+    CAP_WIDTH = (X_MAX - X_MIN) / N_CAPS
 
     def __init__(self, parent=None, *, enable_zoom: bool = False) -> None:
         super().__init__(parent)
@@ -28,112 +34,140 @@ class CapillaryScanPlot(QWidget):
         layout.addWidget(self._canvas)
 
         self._selected_idx: Optional[int] = None
-        
-        # --- 核心改动 1: 初始化数据状态 ---
-        self._n_caps: int = 16  # 默认 16 根毛细管
-        self._y_data: List[float] = [0.0] * self._n_caps # 初始强度全为 0
-        
-        # 控制峰的形状
-        self._sigma = 0.15      # 峰宽
-        self._offset_step = 1.0 # 每个capillary间距
+        self._enabled_mask: Optional[List[bool]] = None
+
+        # 当前显示的扫描原始点（严格按串口原始数据）
+        self._scan_xs: List[float] = []
+        self._scan_ys: List[float] = []
+
+        # 每通道峰值标记（由原始点统计得到）
+        self._cap_peaks: List[float] = [0.0] * self.N_CAPS
+        self._cap_peak_x: List[float] = [
+            self.X_MIN + (i + 0.5) * self.CAP_WIDTH for i in range(self.N_CAPS)
+        ]
+
+        self._frozen: bool = False
 
         self._canvas.mpl_connect("button_press_event", self._on_click)
-        
-        # 初始化显示空图表
-        self._init_plot()
+        self._redraw()
 
-    def _init_plot(self) -> None:
-        """初始化绘图参数"""
-        self._ax.set_title("Capillary Scan (Gaussian Peaks)")
+    def _init_axes(self) -> None:
+        self._ax.set_title("Capillary Scan (Raw Serial Data)")
         self._ax.set_xlabel("Scan Position")
         self._ax.set_ylabel("Signal Intensity")
-        self._ax.set_ylim(0, 120) # 固定 Y 轴范围
+        self._ax.set_xlim(self.X_MIN - 0.3, self.X_MAX + 0.3)
+        self._ax.set_ylim(0, 130)
         self._ax.grid(True, alpha=0.25)
 
-    # --- 核心改动 2: 处理 SerialWorker 发来的信号 ---
+    def _recompute_peaks_from_raw(self) -> None:
+        self._cap_peaks = [0.0] * self.N_CAPS
+        for x, y in zip(self._scan_xs, self._scan_ys):
+            ch = int((x - self.X_MIN) / self.CAP_WIDTH)
+            if 0 <= ch < self.N_CAPS and y > self._cap_peaks[ch]:
+                self._cap_peaks[ch] = y
+
     @Slot(object)
     def handle_sample(self, sample: MSTDataSample) -> None:
-        """
-        处理单点数据更新。
-        SerialWorker.data_ready 应该连接到这个 Slot。
-        """
-        # 1. 提取数据
-        dist = sample.distance
-        fluo = sample.fluo
-        
-        # 2. 映射逻辑：将 distance 映射到毛细管索引 (0-15)
-        # 假设 STM32 发送的 distance 就是 index (0, 1, 2...) 
-        # 或者通过 round(dist / offset_step) 计算
-        idx = int(round(dist / self._offset_step))
-        
-        if 0 <= idx < self._n_caps:
-            # 更新该位置的最新强度值
-            self._y_data[idx] = fluo
-            
-            # 3. 触发重绘（调用现有的 set_scan 逻辑）
-            # 为了性能，可以考虑只在所有点更新完后再重绘，或者降低重绘频率
-            self.set_scan(self._y_data, selected_idx=self._selected_idx)
+        """兼容直接单点喂入：仅用于原始串口扫描帧。"""
+        if sample.mst_stream:
+            self.freeze()
+            return
+        if self._frozen:
+            return
+
+        self._scan_xs.append(float(sample.distance))
+        self._scan_ys.append(float(sample.fluo))
+        self._recompute_peaks_from_raw()
+        self._redraw()
+
+    def freeze(self) -> None:
+        self._frozen = True
+        self._redraw()
+
+    def set_selection(self, idx: Optional[int]) -> None:
+        self._selected_idx = idx
+        self._redraw()
+
+    def set_enabled_mask(self, mask: List[bool]) -> None:
+        self._enabled_mask = mask
+        self._redraw()
+
+    def set_raw_scan(
+        self,
+        xs: Sequence[float],
+        ys: Sequence[float],
+        enabled_mask: Optional[List[bool]] = None,
+        selected_idx: Optional[int] = None,
+        frozen: bool = False,
+    ) -> None:
+        """按原始串口扫描点绘制，不做任何高斯合成。"""
+        n = min(len(xs), len(ys))
+        self._scan_xs = [float(v) for v in xs[:n]]
+        self._scan_ys = [float(v) for v in ys[:n]]
+        self._enabled_mask = enabled_mask
+        self._selected_idx = selected_idx
+        self._frozen = bool(frozen)
+        self._recompute_peaks_from_raw()
+        self._redraw()
 
     def set_scan(
         self,
-        y_center: Iterable[float],  # 每个cap的峰中心（强度）
+        y_center: Iterable[float],
         enabled_mask: Optional[List[bool]] = None,
         selected_idx: Optional[int] = None,
     ) -> None:
-        ys = list(y_center)
-        n = len(ys)
-        enabled = enabled_mask if enabled_mask is not None else [True] * n
+        """
+        兼容旧接口（模拟模式）：由 16 通道强度合成高斯峰。
+        串口模式请使用 set_raw_scan()。
+        """
+        ys = [float(v) for v in y_center][: self.N_CAPS]
+        if len(ys) < self.N_CAPS:
+            ys.extend([0.0] * (self.N_CAPS - len(ys)))
 
+        self._enabled_mask = enabled_mask
         self._selected_idx = selected_idx
-        self._n_caps = n
-        self._y_data = ys # 同步内部数据
+        self._frozen = True
+        self._cap_peaks = ys
 
+        sigma = self.CAP_WIDTH * 0.16
+        x_dense = np.linspace(self.X_MIN, self.X_MAX, 500)
+        y_dense = np.zeros_like(x_dense)
+        for i, amp in enumerate(ys):
+            mu = self.X_MIN + (i + 0.5) * self.CAP_WIDTH
+            y_dense += amp * np.exp(-((x_dense - mu) ** 2) / (2 * sigma * sigma))
+
+        self._scan_xs = x_dense.tolist()
+        self._scan_ys = y_dense.tolist()
+        self._redraw()
+
+    def _redraw(self) -> None:
         self._ax.clear()
-        self._init_plot()
+        self._init_axes()
 
-        if n == 0:
-            self._canvas.draw_idle()
-            return
+        if self._scan_xs:
+            self._ax.plot(self._scan_xs, self._scan_ys, color="#1f77b4", lw=1.2, alpha=0.85)
 
-        # 基础x（局部峰）
-        x_local = np.linspace(-0.5, 0.5, 120)
+        mask = self._enabled_mask or [True] * self.N_CAPS
+        for i in range(self.N_CAPS):
+            py = self._cap_peaks[i]
+            if py < 1.0:
+                continue
 
-        for i in range(n):
-            # 颜色逻辑
-            if not enabled[i]:
-                color = "#c7c7c7"
-                alpha = 0.4
-            elif selected_idx is not None and i == selected_idx:
-                color = "#2ca02c"
-                alpha = 1.0
+            px = self._cap_peak_x[i]
+            if not mask[i]:
+                color, ec, sz = "#c7c7c7", "#999999", 25
+            elif self._selected_idx is not None and i == self._selected_idx:
+                color, ec, sz = "#2ca02c", "#2ca02c", 60
             else:
-                color = "#1f77b4"
-                alpha = 0.8
+                color, ec, sz = "white", "black", 30
 
-            # 高斯峰（用y_center作为幅值）
-            A = ys[i]
-            y = A * np.exp(-(x_local ** 2) / (2 * self._sigma ** 2))
-
-            # 横向平移 → 不同capillary
-            x_shifted = x_local + i * self._offset_step
-            self._ax.plot(x_shifted, y, color=color, alpha=alpha, linewidth=2)
-
-        # 设置范围
-        self._ax.set_xlim(-0.5, (n - 1) * self._offset_step + 0.5)
-
-        # 绘制中心点标记
-        for i in range(n):
-            x0 = i * self._offset_step
-            y0 = ys[i]
-            size = 60 if (selected_idx is not None and i == selected_idx) else 30
-            self._ax.scatter(x0, y0, color="white", edgecolors="black", s=size, zorder=3)
+            self._ax.scatter(px, py, color=color, edgecolors=ec, s=sz, zorder=4)
 
         self._canvas.draw_idle()
 
     def _on_click(self, event) -> None:
         if event.inaxes != self._ax or event.xdata is None:
             return
-        clicked_x = float(event.xdata)
-        idx = int(round(clicked_x / self._offset_step))
-        if 0 <= idx < self._n_caps:
-            self.point_clicked.emit(idx)
+        ch = int((float(event.xdata) - self.X_MIN) / self.CAP_WIDTH)
+        if 0 <= ch < self.N_CAPS:
+            self.point_clicked.emit(ch)

@@ -112,7 +112,12 @@ def parse_mst_frame(frame: ProtocolFrame) -> MSTDataSample:
     distance = pos_raw / 100.0
     
     ir_on = bool(reserved & 0x01)
-    mst_stream = bool(reserved & 0x02)
+
+    # 兼容 MCU 当前阶段编码：
+    #   SCAN=0, MST_PRE=2, MST_HEAT=3, MST_REC=4
+    # 其中 REC=4 的 bit1 为 0，如果只看 bit1 会被误判为 SCAN。
+    # 因此这里以 reserved!=0 判定是否处于 MST 数据流。
+    mst_stream = (reserved != 0)
     return MSTDataSample(
         t_ms=t_ms,
         distance=distance,

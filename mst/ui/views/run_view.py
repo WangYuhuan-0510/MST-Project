@@ -72,6 +72,9 @@ class _SerialBuffer:
         self.enabled_mask: List[bool] = [True] * n_ch
         self._latest: List[float] = [0.0] * n_ch
         self._scan_latest: List[float] = [0.0] * n_ch
+        self.scan_x_raw: deque = deque(maxlen=6000)
+        self.scan_y_raw: deque = deque(maxlen=6000)
+        self.scan_frozen: bool = False
         self._dist_min: Optional[float] = None
         self._dist_max: Optional[float] = None
         self.frame_count: int = 0
@@ -135,11 +138,15 @@ class _SerialBuffer:
             self._dist_min = dist if self._dist_min is None else min(self._dist_min, dist)
             self._dist_max = dist if self._dist_max is None else max(self._dist_max, dist)
 
-            if 0.0 <= dist <= float(self.n_ch - 1):
-                idx = int(round(dist))
+            # 通道映射：与 CapillaryScanPlot 保持一致，使用 floor(dist * N / X_MAX)
+            # 而非 round(dist)，避免末尾通道峰值错位（Bug 2 修复）
+            X_MAX = float(self.n_ch)   # 扫描距离上限（0 ~ n_ch，对应 0~15mm）
+            if 0.0 <= dist < X_MAX:
+                idx = int(dist * self.n_ch / X_MAX)
+                idx = min(idx, self.n_ch - 1)
             elif self._dist_min is not None and self._dist_max is not None and self._dist_max > self._dist_min:
                 ratio = (dist - self._dist_min) / (self._dist_max - self._dist_min)
-                idx = int(round(ratio * (self.n_ch - 1)))
+                idx = min(int(ratio * self.n_ch), self.n_ch - 1)
             else:
                 idx = 0
             if 0 <= idx < self.n_ch:
@@ -149,10 +156,19 @@ class _SerialBuffer:
                 self.last_fluo = float(sample.fluo)
 
                 if not mst_stream:
-                    self._scan_latest[idx] = float(sample.fluo)
+                    # 保留通道峰值最大值，而非覆盖写（Bug 1 修复）
+                    # 扫描波形经过每个通道时先升后降再归零，last-write 会
+                    # 把峰值覆盖为下降沿或零值，导致显示混乱
+                    fluo = float(sample.fluo)
+                    if fluo > self._scan_latest[idx]:
+                        self._scan_latest[idx] = fluo
+                    if not self.scan_frozen:
+                        self.scan_x_raw.append(dist)
+                        self.scan_y_raw.append(fluo)
                     self.phase = "SCAN"
                 else:
                     self.phase = "MST_IR" if ir_on else "MST_PRE"
+                    self.scan_frozen = True
 
                 if mst_stream:
                     self._enter_mst_stream(t_ms)
@@ -179,6 +195,9 @@ class _SerialBuffer:
             d.clear()
         self._latest = [0.0] * self.n_ch
         self._scan_latest = [0.0] * self.n_ch
+        self.scan_x_raw.clear()
+        self.scan_y_raw.clear()
+        self.scan_frozen = False
         self._dist_min = None
         self._dist_max = None
         self.frame_count = 0
@@ -224,10 +243,19 @@ class _SerialBuffer:
             out.append(ys[best_j])
         return out
 
-    def scan_center(self) -> List[float]:
+    def scan_profile(self) -> List[float]:
+        """返回用于 Capillary Scan 的 16 通道强度（供高斯峰合成）。"""
         if self.last_kind == "mst":
             return list(self._scan_latest)
         return [d[-1] if d else 0.0 for d in self.traces]
+
+    def scan_raw_points(self) -> tuple[list[float], list[float], bool]:
+        """返回串口扫描原始点（x,y）及是否已冻结。"""
+        return list(self.scan_x_raw), list(self.scan_y_raw), bool(self.scan_frozen)
+
+    def scan_center(self) -> List[float]:
+        # 兼容旧调用
+        return self.scan_profile()
 
     def debug_snapshot(self) -> str:
         dmin = "None" if self._dist_min is None else f"{self._dist_min:.3f}"
@@ -760,7 +788,7 @@ class RunView(QWidget):
         """串口模式的定时刷新（替代 _on_tick）。"""
         t   = self._serial_buf.time_list()
         mat = self._serial_buf.trace_matrix()
-        sc  = self._serial_buf.scan_center()
+        raw_x, raw_y, scan_frozen = self._serial_buf.scan_raw_points()
         mask = self._serial_buf.enabled_mask
         sel  = self.vm.selected_capillary   # 复用 VM 的选中状态
         ph = self._serial_buf.phase
@@ -771,7 +799,13 @@ class RunView(QWidget):
         else:
             self._set_ser_status("串口采集中：MST 加热（IR 已开）", "success")
 
-        self.plot_scan.set_scan(sc, enabled_mask=mask, selected_idx=sel)
+        self.plot_scan.set_raw_scan(
+            raw_x,
+            raw_y,
+            enabled_mask=mask,
+            selected_idx=sel,
+            frozen=scan_frozen,
+        )
         t_per = self._serial_buf.mst_times_per_channel()
         if not self._serial_buf.has_mst_data():
             self.plot_trace.set_traces(
@@ -922,11 +956,15 @@ class RunView(QWidget):
         serial_snapshot: Optional[Dict[str, Any]] = None
         if self._mode == "serial":
             t1v = float(self.spin_t1_ser.value())
+            raw_x, raw_y, scan_frozen = self._serial_buf.scan_raw_points()
             serial_snapshot = {
                 "t": self._serial_buf.time_list(),
                 "mat": self._serial_buf.trace_matrix(),
                 "t_per_trace": self._serial_buf.mst_times_per_channel(),
                 "sc": self._serial_buf.scan_center(),
+                "scan_raw_x": raw_x,
+                "scan_raw_y": raw_y,
+                "scan_frozen": scan_frozen,
                 "mask": list(self._serial_buf.enabled_mask),
                 "sel": self.vm.selected_capillary,
                 "t1": t1v,
@@ -1011,6 +1049,9 @@ class _ReviewDialog(QDialog):
         t_per_trace = None
         if self._serial_snapshot is None:
             sc = self._vm.scan_center
+            scan_raw_x = None
+            scan_raw_y = None
+            scan_frozen = False
             mask = self._vm.enabled_mask
             sel = self._vm.selected_capillary
             t = self._vm.t
@@ -1024,6 +1065,9 @@ class _ReviewDialog(QDialog):
                 fit_curve = (self._vm.fit.x_fit, self._vm.fit.y_fit, self._vm.fit.text)
         else:
             sc = self._serial_snapshot["sc"]
+            scan_raw_x = self._serial_snapshot.get("scan_raw_x")
+            scan_raw_y = self._serial_snapshot.get("scan_raw_y")
+            scan_frozen = bool(self._serial_snapshot.get("scan_frozen", False))
             mask = self._serial_snapshot["mask"]
             sel = self._serial_snapshot["sel"]
             t = self._serial_snapshot["t"]
@@ -1046,7 +1090,16 @@ class _ReviewDialog(QDialog):
             fit_curve = None
 
         if self.plot_scan is not None:
-            self.plot_scan.set_scan(sc, enabled_mask=mask, selected_idx=sel)
+            if scan_raw_x is not None and scan_raw_y is not None:
+                self.plot_scan.set_raw_scan(
+                    scan_raw_x,
+                    scan_raw_y,
+                    enabled_mask=mask,
+                    selected_idx=sel,
+                    frozen=scan_frozen,
+                )
+            else:
+                self.plot_scan.set_scan(sc, enabled_mask=mask, selected_idx=sel)
         if self.plot_trace is not None:
             self.plot_trace.set_traces(
                 t, mat,
