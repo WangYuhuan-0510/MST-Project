@@ -15,13 +15,19 @@ class CapillaryScanPlot(QWidget):
     point_clicked = Signal(int)
 
     N_CAPS = 16
-    INDEX_MIN = 1.0
-    INDEX_MAX = 16.0
-    RAW_BASELINE_MIN = 20.0  # 去除 0~20 的突兀底噪段
+    RAW_BASELINE_MIN = 20.0  # 去除 0~20 的底噪段
 
-    def __init__(self, parent=None, *, enable_zoom: bool = False) -> None:
+    def __init__(
+        self,
+        parent=None,
+        *,
+        enable_zoom: bool = False,
+        show_capillary_index: bool = True,
+    ) -> None:
         super().__init__(parent)
         self._enable_zoom = bool(enable_zoom)
+        self._show_capillary_index = bool(show_capillary_index)
+
         self._fig = Figure(figsize=(4, 3), tight_layout=True)
         self._canvas = FigureCanvas(self._fig)
         self._ax = self._fig.add_subplot(111)
@@ -51,11 +57,17 @@ class CapillaryScanPlot(QWidget):
 
     def _init_axes(self) -> None:
         self._ax.set_title("Capillary Scan (Raw Serial Data)")
-        self._ax.set_xlabel("Capillary Index")
+        if self._show_capillary_index:
+            self._ax.set_xlabel("Capillary Index")
+            self._ax.set_xticks(list(range(1, self.N_CAPS + 1)))
+            self._ax.set_xticklabels([str(i) for i in range(1, self.N_CAPS + 1)])
+        else:
+            self._ax.set_xlabel("Scan Position")
+            self._ax.set_xticks([])
+
         self._ax.set_ylabel("Signal Intensity")
         self._ax.set_xlim(0.5, 16.5)
         self._ax.set_ylim(0, 180)
-        self._ax.set_xticks(list(range(1, self.N_CAPS + 1)))
         self._ax.grid(True, alpha=0.25)
 
     @Slot(object)
@@ -131,7 +143,7 @@ class CapillaryScanPlot(QWidget):
         x_dense = np.linspace(0.5, 16.5, 600)
         y_dense = np.zeros_like(x_dense)
         for i, amp in enumerate(ys):
-            mu = float(i + 1)  # 关键：峰顶与 1~16 索引严格对齐
+            mu = float(i + 1)
             y_dense += amp * np.exp(-((x_dense - mu) ** 2) / (2 * sigma * sigma))
 
         self._scan_xs = x_dense.tolist()
@@ -150,7 +162,6 @@ class CapillaryScanPlot(QWidget):
     def _on_click(self, event) -> None:
         if event.inaxes != self._ax or event.xdata is None:
             return
-        # 将 1~16 映射回 0~15 的通道索引
         idx = int(round(float(event.xdata))) - 1
         if 0 <= idx < self.N_CAPS:
             self.point_clicked.emit(idx)

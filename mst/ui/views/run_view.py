@@ -88,6 +88,7 @@ class _SerialBuffer:
         self._ir_seen: bool = False
         self._mst_preheat_axis: bool = False
         self._mst_t0_ms: int = 0
+        self.mst_completed: bool = False
 
     def _clear_mst_series(self) -> None:
         for d in self.mst_traces:
@@ -310,7 +311,7 @@ class RunView(QWidget):
         self._sim_paused = False
         self._serial_paused = False
 
-        # 当前模式："sim" | "serial"
+        # 纯串口模式：先以 sim 作为初始占位，稍后强制切到 serial
         self._mode = "sim"
 
         plot_box_height = 320
@@ -343,7 +344,8 @@ class RunView(QWidget):
             btn.setFixedHeight(28)
             btn.setCheckable(True)
             btn.setCursor(__import__("PySide6.QtCore", fromlist=["Qt"]).Qt.PointingHandCursor)
-        self.btn_mode_sim.setChecked(True)
+        self.btn_mode_sim.setChecked(False)
+        self.btn_mode_ser.setChecked(True)
         self.btn_mode_sim.clicked.connect(lambda: self._switch_mode("sim"))
         self.btn_mode_ser.clicked.connect(lambda: self._switch_mode("serial"))
         self._apply_mode_btn_style()
@@ -356,6 +358,7 @@ class RunView(QWidget):
         mode_lo.addWidget(self.btn_mode_ser)
         mode_lo.addStretch()
         root.addWidget(mode_bar)
+        mode_bar.setVisible(False)  # 纯串口模式：隐藏数据来源切换
 
         # ── 控制栏（模拟模式）─────────────────────────────────────────────
         self._sim_ctrl_card = QFrame()
@@ -544,7 +547,7 @@ class RunView(QWidget):
         box_scan.setStyleSheet(_gb)
         layout_scan = QVBoxLayout(box_scan)
         layout_scan.setContentsMargins(8, 18, 8, 8)
-        self.plot_scan = CapillaryScanPlot(self)
+        self.plot_scan = CapillaryScanPlot(self, show_capillary_index=False)
         self.plot_scan.point_clicked.connect(self.vm.set_selected_capillary)
         layout_scan.addWidget(self.plot_scan)
         self.btn_review_scan = QPushButton("Review")
@@ -594,6 +597,7 @@ class RunView(QWidget):
 
         # ── 初始化串口列表 ────────────────────────────────────────────────
         self._refresh_ports()
+        self._switch_mode("serial")
         self._render()
 
     # ── 模式切换 ──────────────────────────────────────────────────────────

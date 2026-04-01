@@ -5,7 +5,6 @@ welcome_view.py
 """
 from __future__ import annotations
 
-import json
 import os
 from datetime import datetime
 from pathlib import Path
@@ -17,6 +16,7 @@ from PySide6.QtWidgets import (
     QPushButton, QFrame, QFileDialog, QSizePolicy,
 )
 
+from mst.core.experiments import Experiment
 from .ui_style import PALETTE
 
 _ORG = "SUAN-Lab"
@@ -183,7 +183,7 @@ class WelcomeView(QWidget):
         center_lo.setContentsMargins(0, 0, 0, 0)
         center_lo.setSpacing(0)
 
-        self.btn_new  = _SessionBtn("📄", "Start New Experiment",   primary=False)
+        self.btn_new = _SessionBtn("📄", "Start New Experiment", primary=False)
         self.btn_open = _SessionBtn("📂", "Open Existing Experiment", primary=False)
         self.btn_new.clicked.connect(self._on_new)
         self.btn_open.clicked.connect(self._on_open)
@@ -246,15 +246,15 @@ class WelcomeView(QWidget):
     def _on_new(self):
         self.setEnabled(False)
 
-        # 关键：DontUseNativeDialog 强制使用 Qt 自实现的对话框，
-        # 完全绕开 Windows 原生窗口消息（WM_ACTIVATE / WM_SETFOCUS），
-        # 对话框关闭后不会向主窗口注入额外系统事件，setCurrentIndex 立即生效。
-        dlg = QFileDialog(self, "新建实验文件",
-                          str(Path.home() / "新建实验.moc"),
-                          "MST 实验文件 (*.moc);;所有文件 (*)")
+        dlg = QFileDialog(
+            self,
+            "新建实验文件",
+            str(Path.home() / "experiment.h5"),
+            "MST 实验文件 (*.h5);;所有文件 (*)",
+        )
         dlg.setAcceptMode(QFileDialog.AcceptSave)
         dlg.setOption(QFileDialog.DontUseNativeDialog, True)
-        dlg.setDefaultSuffix("moc")
+        dlg.setDefaultSuffix("h5")
 
         if dlg.exec() != QFileDialog.Accepted:
             self.setEnabled(True)
@@ -268,29 +268,26 @@ class WelcomeView(QWidget):
         path = files[0]
         self.setEnabled(True)
 
-        moc_path = Path(path)
-        if moc_path.suffix.lower() != ".moc":
-            moc_path = moc_path.with_suffix(".moc")
+        exp_path = Path(path)
+        if exp_path.suffix.lower() != ".h5":
+            exp_path = exp_path.with_suffix(".h5")
 
-        moc_path.write_text(
-            json.dumps({
-                "version": "1.0",
-                "created": datetime.now().isoformat(),
-                "name": moc_path.stem,
-            }, ensure_ascii=False, indent=2),
-            encoding="utf-8",
-        )
-        _save_recent(str(moc_path))
+        # 创建一个最小可用的 experiment.h5
+        Experiment(name=exp_path.stem).save_h5(exp_path)
+
+        _save_recent(str(exp_path))
         self._populate_recent()
-        # Qt 非原生对话框关闭后无残留系统消息，直接 emit 即可
-        self.session_opened.emit(str(moc_path))
+        self.session_opened.emit(str(exp_path))
 
     def _on_open(self):
         self.setEnabled(False)
 
-        dlg = QFileDialog(self, "打开实验文件",
-                          str(Path.home()),
-                          "MST 实验文件 (*.moc);;所有文件 (*)")
+        dlg = QFileDialog(
+            self,
+            "打开实验文件",
+            str(Path.home()),
+            "MST 实验文件 (*.h5);;所有文件 (*)",
+        )
         dlg.setAcceptMode(QFileDialog.AcceptOpen)
         dlg.setOption(QFileDialog.DontUseNativeDialog, True)
 
