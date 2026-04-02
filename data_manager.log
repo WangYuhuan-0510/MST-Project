@@ -199,3 +199,101 @@
 2026-04-02 14:32:27,435 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=5 emitted=32 cursor=160/4064
 2026-04-02 14:32:30,297 [INFO] mst.data_manager - DataManager.stop source=H5ReplayDataSource
 2026-04-02 14:32:30,297 [INFO] mst.data_manager - H5ReplayDataSource.stop active_timer=true cursor=544
+2026-04-02 15:21:10,920 [INFO] mst.data_manager - logger initialized, file=C:\Users\22954\OneDrive\桌面\SUAN\MST\data_manager.log
+2026-04-02 15:21:21,155 [INFO] mst.data_manager - DataManager.list_serial_ports ports=['COM3', 'COM6', 'COM5']
+2026-04-02 15:21:21,858 [INFO] mst.data_manager - DataManager.use_h5_replay path=C:/Users/22954/OneDrive/桌面/experiment.h5 interval_ms=30
+2026-04-02 15:21:21,858 [INFO] mst.data_manager - DataManager._set_source source=H5ReplayDataSource
+2026-04-02 15:21:21,858 [INFO] mst.data_manager - DataManager.start source=H5ReplayDataSource
+2026-04-02 15:21:21,858 [INFO] mst.data_manager - H5ReplayDataSource.start path=C:/Users/22954/OneDrive/桌面/experiment.h5 interval_ms=30
+2026-04-02 15:21:21,858 [INFO] mst.data_manager - H5ReplayDataSource.stop active_timer=false
+2026-04-02 15:21:21,858 [INFO] mst.data_manager - H5ReplayDataSource._build_samples path=C:/Users/22954/OneDrive/桌面/experiment.h5
+2026-04-02 15:21:21,872 [INFO] mst.data_manager - H5ReplayDataSource samples built: t_points=114 channels=16 total_samples=4064
+2026-04-02 15:21:22,264 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=1 emitted=32 cursor=32/4064
+2026-04-02 15:21:22,606 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=2 emitted=32 cursor=64/4064
+2026-04-02 15:21:23,197 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=3 emitted=32 cursor=96/4064
+2026-04-02 15:21:23,552 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=4 emitted=32 cursor=128/4064
+2026-04-02 15:21:23,820 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=5 emitted=32 cursor=160/4064
+2026-04-02 15:21:27,113 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=20 emitted=32 cursor=640/4064
+2026-04-02 15:21:31,253 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=40 emitted=32 cursor=1280/4064
+2026-04-02 15:21:35,439 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=60 emitted=32 cursor=1920/4064
+2026-04-02 15:21:39,594 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=80 emitted=32 cursor=2560/4064
+2026-04-02 15:21:43,600 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=100 emitted=32 cursor=3200/4064
+2026-04-02 15:21:47,701 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=120 emitted=32 cursor=3840/4064
+2026-04-02 15:21:49,328 [INFO] mst.data_manager - H5ReplayDataSource.replay_completed total=4064
+2026-04-02 15:22:38,237 [INFO] mst.data_manager - DataManager.use_h5_replay path=C:/Users/22954/OneDrive/桌面/experiment.h5 interval_ms=30
+2026-04-02 15:22:38,237 [INFO] mst.data_manager - DataManager.stop source=H5ReplayDataSource
+2026-04-02 15:22:38,237 [INFO] mst.data_manager - H5ReplayDataSource.stop active_timer=false
+2026-04-02 15:22:38,237 [INFO] mst.data_manager - DataManager._set_source source=H5ReplayDataSource
+2026-04-02 15:22:38,237 [INFO] mst.data_manager - DataManager.start source=H5ReplayDataSource
+2026-04-02 15:22:38,237 [INFO] mst.data_manager - H5ReplayDataSource.start path=C:/Users/22954/OneDrive/桌面/experiment.h5 interval_ms=30
+2026-04-02 15:22:38,237 [INFO] mst.data_manager - H5ReplayDataSource.stop active_timer=false
+2026-04-02 15:22:38,237 [INFO] mst.data_manager - H5ReplayDataSource._build_samples path=C:/Users/22954/OneDrive/桌面/experiment.h5
+2026-04-02 15:22:38,256 [INFO] mst.data_manager - H5ReplayDataSource samples built: t_points=114 channels=16 total_samples=4064
+2026-04-02 15:22:38,307 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=1 emitted=32 cursor=32/4064
+2026-04-02 15:22:38,320 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=2 emitted=32 cursor=64/4064
+2026-04-02 15:22:38,394 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=3 emitted=32 cursor=96/4064
+2026-04-02 15:22:38,561 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=4 emitted=32 cursor=128/4064
+2026-04-02 15:22:38,831 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=5 emitted=32 cursor=160/4064
+2026-04-02 15:22:41,821 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=20 emitted=32 cursor=640/4064
+2026-04-02 15:22:45,904 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=40 emitted=32 cursor=1280/4064
+2026-04-02 15:22:49,835 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=60 emitted=32 cursor=1920/4064
+2026-04-02 15:22:53,955 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=80 emitted=32 cursor=2560/4064
+2026-04-02 15:22:58,315 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=100 emitted=32 cursor=3200/4064
+2026-04-02 15:23:02,594 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=120 emitted=32 cursor=3840/4064
+2026-04-02 15:23:04,359 [INFO] mst.data_manager - H5ReplayDataSource.replay_completed total=4064
+2026-04-02 15:24:37,657 [INFO] mst.data_manager - DataManager.use_h5_replay path=C:\Users\22954\OneDrive\桌面\1.h5 interval_ms=30
+2026-04-02 15:24:37,657 [INFO] mst.data_manager - DataManager.stop source=H5ReplayDataSource
+2026-04-02 15:24:37,657 [INFO] mst.data_manager - H5ReplayDataSource.stop active_timer=false
+2026-04-02 15:24:37,657 [INFO] mst.data_manager - DataManager._set_source source=H5ReplayDataSource
+2026-04-02 15:24:37,660 [INFO] mst.data_manager - DataManager.start source=H5ReplayDataSource
+2026-04-02 15:24:37,660 [INFO] mst.data_manager - H5ReplayDataSource.start path=C:\Users\22954\OneDrive\桌面\1.h5 interval_ms=30
+2026-04-02 15:24:37,660 [INFO] mst.data_manager - H5ReplayDataSource.stop active_timer=false
+2026-04-02 15:24:37,660 [INFO] mst.data_manager - H5ReplayDataSource._build_samples path=C:\Users\22954\OneDrive\桌面\1.h5
+2026-04-02 15:24:37,665 [ERROR] mst.data_manager - H5ReplayDataSource build failed: empty run/t
+2026-04-02 15:24:37,665 [ERROR] mst.data_manager - DataManager.start failed: 回放失败：h5 中没有 run/t 时间轴数据
+Traceback (most recent call last):
+  File "C:\Users\22954\OneDrive\桌面\SUAN\MST\mst\core\data_manager.py", line 302, in start
+    self._source.start()
+  File "C:\Users\22954\OneDrive\桌面\SUAN\MST\mst\core\data_manager.py", line 209, in start
+    self._build_samples()
+  File "C:\Users\22954\OneDrive\桌面\SUAN\MST\mst\core\data_manager.py", line 126, in _build_samples
+    raise ValueError("回放失败：h5 中没有 run/t 时间轴数据")
+ValueError: 回放失败：h5 中没有 run/t 时间轴数据
+2026-04-02 15:50:05,627 [INFO] mst.data_manager - DataManager.use_h5_replay path=C:/Users/22954/OneDrive/桌面/experiment.h5 interval_ms=30
+2026-04-02 15:50:05,628 [INFO] mst.data_manager - DataManager.stop source=H5ReplayDataSource
+2026-04-02 15:50:05,629 [INFO] mst.data_manager - H5ReplayDataSource.stop active_timer=false
+2026-04-02 15:50:05,629 [INFO] mst.data_manager - DataManager._set_source source=H5ReplayDataSource
+2026-04-02 15:50:05,629 [INFO] mst.data_manager - DataManager.start source=H5ReplayDataSource
+2026-04-02 15:50:05,629 [INFO] mst.data_manager - H5ReplayDataSource.start path=C:/Users/22954/OneDrive/桌面/experiment.h5 interval_ms=30
+2026-04-02 15:50:05,629 [INFO] mst.data_manager - H5ReplayDataSource.stop active_timer=false
+2026-04-02 15:50:05,630 [INFO] mst.data_manager - H5ReplayDataSource._build_samples path=C:/Users/22954/OneDrive/桌面/experiment.h5
+2026-04-02 15:50:05,654 [INFO] mst.data_manager - H5ReplayDataSource samples built: t_points=114 channels=16 total_samples=4064
+2026-04-02 15:50:05,782 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=1 emitted=32 cursor=32/4064
+2026-04-02 15:50:06,347 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=2 emitted=32 cursor=64/4064
+2026-04-02 15:50:06,802 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=3 emitted=32 cursor=96/4064
+2026-04-02 15:50:07,123 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=4 emitted=32 cursor=128/4064
+2026-04-02 15:50:07,487 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=5 emitted=32 cursor=160/4064
+2026-04-02 15:50:13,933 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=20 emitted=32 cursor=640/4064
+2026-04-02 15:50:21,914 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=40 emitted=32 cursor=1280/4064
+2026-04-02 15:50:31,176 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=60 emitted=32 cursor=1920/4064
+2026-04-02 15:50:40,471 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=80 emitted=32 cursor=2560/4064
+2026-04-02 15:50:50,386 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=100 emitted=32 cursor=3200/4064
+2026-04-02 15:50:56,347 [INFO] mst.data_manager - DataManager.use_h5_replay path=C:/Users/22954/OneDrive/桌面/experiment.h5 interval_ms=30
+2026-04-02 15:50:56,347 [INFO] mst.data_manager - DataManager.stop source=H5ReplayDataSource
+2026-04-02 15:50:56,347 [INFO] mst.data_manager - H5ReplayDataSource.stop active_timer=true cursor=3552
+2026-04-02 15:50:56,347 [INFO] mst.data_manager - DataManager._set_source source=H5ReplayDataSource
+2026-04-02 15:50:56,347 [INFO] mst.data_manager - DataManager.start source=H5ReplayDataSource
+2026-04-02 15:50:56,347 [INFO] mst.data_manager - H5ReplayDataSource.start path=C:/Users/22954/OneDrive/桌面/experiment.h5 interval_ms=30
+2026-04-02 15:50:56,347 [INFO] mst.data_manager - H5ReplayDataSource.stop active_timer=false
+2026-04-02 15:50:56,347 [INFO] mst.data_manager - H5ReplayDataSource._build_samples path=C:/Users/22954/OneDrive/桌面/experiment.h5
+2026-04-02 15:50:56,372 [INFO] mst.data_manager - H5ReplayDataSource samples built: t_points=38 channels=16 total_samples=2848
+2026-04-02 15:50:56,489 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=1 emitted=32 cursor=32/2848
+2026-04-02 15:50:56,894 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=2 emitted=32 cursor=64/2848
+2026-04-02 15:50:57,266 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=3 emitted=32 cursor=96/2848
+2026-04-02 15:50:57,638 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=4 emitted=32 cursor=128/2848
+2026-04-02 15:50:57,958 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=5 emitted=32 cursor=160/2848
+2026-04-02 15:51:03,769 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=20 emitted=32 cursor=640/2848
+2026-04-02 15:51:10,736 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=40 emitted=32 cursor=1280/2848
+2026-04-02 15:51:14,845 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=60 emitted=32 cursor=1920/2848
+2026-04-02 15:51:19,060 [INFO] mst.data_manager - H5ReplayDataSource.tick tick=80 emitted=32 cursor=2560/2848
+2026-04-02 15:51:21,176 [INFO] mst.data_manager - H5ReplayDataSource.replay_completed total=2848

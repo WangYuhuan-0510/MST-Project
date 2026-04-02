@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional
 
 import h5py
 import numpy as np
+from mst.core.experiment_schema import default_setup_data, get_experiment_type_config, normalize_experiment_type_id
 
 
 @dataclass
@@ -36,10 +37,14 @@ class Experiment:
             "operator": "",       # 操作人员
             "timestamp": datetime.now().isoformat(timespec="seconds"), # 时间戳
             "excitation": "",     # 激发光波长/类型
-            "experiment_type": "", # 实验类型
+            "experiment_type": "Pre-test", # 实验类型名称（兼容旧字段）
+            "experiment_type_id": "pre_test", # 实验类型 ID（配置驱动）
         }
     )
     
+    # 实验设置实例数据（按 schema 保存，不再耦合 UI 控件）
+    setup_data: Dict[str, Any] = field(default_factory=lambda: default_setup_data("pre_test"))
+
     # 实验仪器协议设置
     protocol: Dict[str, Any] = field(
         default_factory=lambda: {
@@ -73,21 +78,37 @@ class Experiment:
             return default
 
     @classmethod
-    def from_ui(cls, *, name: str, setup_params: Dict[str, Any], excitation: str, experiment_type: str) -> "Experiment":
-        """工厂方法：根据 UI 层的初始设置参数创建一个新的 Experiment 对象"""
+    def from_ui(
+        cls,
+        *,
+        name: str,
+        setup_params: Dict[str, Any],
+        excitation: str,
+        experiment_type: str,
+        experiment_type_id: str | None = None,
+    ) -> "Experiment":
+        """工厂方法：根据 UI 层参数创建 Experiment。"""
         exp = cls(name=name)
 
+        type_id = normalize_experiment_type_id(experiment_type_id or experiment_type)
+        type_cfg = get_experiment_type_config(type_id)
+
+        # 先用 schema 默认值初始化实例数据，再覆盖 UI 输入
+        exp.setup_data = default_setup_data(type_id)
+        exp.setup_data.update(setup_params or {})
+
         # 填充元数据
-        exp.metadata["temperature"] = setup_params.get("temperature", "")
-        exp.metadata["operator"] = setup_params.get("operator", "")
+        exp.metadata["temperature"] = str(exp.setup_data.get("temperature", "") or "")
+        exp.metadata["operator"] = str(exp.setup_data.get("operator", "") or "")
         exp.metadata["timestamp"] = datetime.now().isoformat(timespec="seconds")
         exp.metadata["excitation"] = excitation or ""
-        exp.metadata["experiment_type"] = experiment_type or ""
+        exp.metadata["experiment_type_id"] = type_id
+        exp.metadata["experiment_type"] = type_cfg.get("name", experiment_type or "Pre-test")
 
         # 填充协议设置
-        exp.protocol["led_power"] = int(setup_params.get("excitation_pct", 20) or 20)
-        exp.protocol["mst_power"] = setup_params.get("mst_power", "中") or "中"
-        exp.protocol["time_scheme"] = setup_params.get("time_scheme", "[]") or "[]"
+        exp.protocol["led_power"] = int(exp.setup_data.get("excitation_pct", 20) or 20)
+        exp.protocol["mst_power"] = str(exp.setup_data.get("mst_power", "中") or "中")
+        exp.protocol["time_scheme"] = str(exp.setup_data.get("time_scheme", "[]") or "[]")
 
         return exp
 
@@ -177,14 +198,19 @@ class Experiment:
         }
 
     def apply_to_setup_view(self, setup_view: Any) -> None:
-        """将模型中的协议参数应用回设置界面 (SetupView)"""
+        """将模型中的配置与协议参数应用回设置界面。"""
         if setup_view is None:
             return
 
-        led = int(self.protocol.get("led_power", 20) or 20)
-        mst = str(self.protocol.get("mst_power", "中") or "中")
+        setup_data = dict(default_setup_data(self.metadata.get("experiment_type_id", "pre_test")))
+        setup_data.update(self.setup_data or {})
 
-        # 更新 UI 控件的值
+        if hasattr(setup_view, "set_data"):
+            setup_view.set_data(setup_data)
+
+        led = int(self.protocol.get("led_power", setup_data.get("excitation_pct", 20)) or 20)
+        mst = str(self.protocol.get("mst_power", setup_data.get("mst_power", "中")) or "中")
+
         if hasattr(setup_view, "spin_excitation"):
             setup_view.spin_excitation.setValue(max(10, min(100, led)))
         if hasattr(setup_view, "cmb_mst"):
@@ -281,6 +307,11 @@ class Experiment:
             for k, v in self.protocol.items():
                 g_protocol.create_dataset(k, data=str(v), dtype=utf8_dtype)
 
+            # 保存实验实例配置（Schema-driven setup data）
+            g_setup = f.create_group("setup")
+            for k, v in (self.setup_data or {}).items():
+                g_setup.create_dataset(k, data=str(v), dtype=utf8_dtype)
+
             # 保存分析运行数据
             g_run = f.create_group("run")
             g_run.create_dataset("enabled_mask", data=np.asarray(self.run_data.get("enabled_mask", []), dtype=np.int8))
@@ -331,6 +362,9 @@ class Experiment:
                     k: f["metadata"][k][()].decode("utf-8") if isinstance(f["metadata"][k][()], (bytes, np.bytes_)) else str(f["metadata"][k][()])
                     for k in f["metadata"].keys()
                 }
+                exp.metadata["experiment_type_id"] = normalize_experiment_type_id(
+                    str(exp.metadata.get("experiment_type_id") or exp.metadata.get("experiment_type") or "pre_test")
+                )
             # 加载协议并转换特定字段类型
             if "protocol" in f:
                 protocol: Dict[str, Any] = {}
@@ -342,6 +376,16 @@ class Experiment:
                     else:
                         protocol[k] = text
                 exp.protocol = protocol
+
+            # 加载 setup 实例数据（配置驱动 UI 的数据层）
+            type_id = normalize_experiment_type_id(
+                str(exp.metadata.get("experiment_type_id") or exp.metadata.get("experiment_type") or "pre_test")
+            )
+            exp.setup_data = default_setup_data(type_id)
+            if "setup" in f:
+                for k in f["setup"].keys():
+                    v = f["setup"][k][()]
+                    exp.setup_data[k] = v.decode("utf-8") if isinstance(v, (bytes, np.bytes_)) else v
 
             # 加载运行状态数据
             if "run" in f:

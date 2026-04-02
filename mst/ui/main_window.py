@@ -14,6 +14,7 @@ from pathlib import Path
 from PySide6.QtWidgets import QMainWindow, QStackedWidget, QMessageBox
 
 from mst.core.app_state import AppState
+from mst.core.experiment_schema import list_experiment_types, normalize_experiment_type_id
 from mst.core.experiments import Experiment
 from .views.welcome_view import WelcomeView
 from .views.session_wizard import SessionWizard
@@ -31,6 +32,7 @@ class MainWindow(QMainWindow):
         self.current_experiment_path: str | None = None
         self.current_excitation: str = "RED"
         self.current_experiment_type: str = "Pre-test"
+        self.current_experiment_type_id: str = "pre_test"
 
         # ── 堆叠页面 ──────────────────────────────────────────────────────
         self._stack = QStackedWidget(self)
@@ -72,11 +74,22 @@ class MainWindow(QMainWindow):
         self.wizard.reset()
         self._stack.setCurrentIndex(1)
 
-    def _on_wizard_completed(self, excitation: str, experiment: str) -> None:
+    def _on_wizard_completed(self, excitation: str, experiment_type_id: str) -> None:
         """向导完成 → 进入主界面。"""
         self.current_excitation = excitation
-        self.current_experiment_type = experiment
+        self.current_experiment_type_id = normalize_experiment_type_id(experiment_type_id)
+
+        type_items = list_experiment_types()
+        name_by_id = {t.get("id"): t.get("name", "") for t in type_items}
+        self.current_experiment_type = str(name_by_id.get(self.current_experiment_type_id, "Pre-test"))
+
+        self.state.current_session.experiment_type_id = self.current_experiment_type_id
+
         pv = self._ensure_project_view()
+        setup_view = pv.content.stack.widget(0)
+        if hasattr(setup_view, "set_experiment_type"):
+            setup_view.set_experiment_type(self.current_experiment_type_id)
+
         self._stack.setCurrentIndex(2)
 
         path = self.current_experiment_path
@@ -108,6 +121,7 @@ class MainWindow(QMainWindow):
                 setup_params=setup_params,
                 excitation=self.current_excitation,
                 experiment_type=self.current_experiment_type,
+                experiment_type_id=self.current_experiment_type_id,
             )
             exp.capture_from_run_view(run_view)
             exp.save_h5(self.current_experiment_path)
@@ -119,12 +133,31 @@ class MainWindow(QMainWindow):
     def _on_new_exp(self) -> None:
         if self.project_view:
             self.project_view.content.stack.setCurrentIndex(0)
+            setup_view = self.project_view.content.stack.widget(0)
+            self.state.current_session.setup_data = {}
+            if hasattr(setup_view, "set_experiment_type"):
+                setup_view.set_experiment_type(self.current_experiment_type_id)
 
     def _load_experiment_into_ui(self, path: str, pv: ProjectView) -> None:
         try:
             exp = Experiment.load_h5(path)
             setup_view = pv.content.stack.widget(0)
             run_view = pv.content.stack.widget(2)
+
+            loaded_type_id = normalize_experiment_type_id(
+                str(exp.metadata.get("experiment_type_id") or exp.metadata.get("experiment_type") or self.current_experiment_type_id)
+            )
+            self.current_experiment_type_id = loaded_type_id
+
+            type_items = list_experiment_types()
+            name_by_id = {t.get("id"): t.get("name", "") for t in type_items}
+            self.current_experiment_type = str(name_by_id.get(loaded_type_id, self.current_experiment_type))
+
+            self.state.current_session.experiment_type_id = loaded_type_id
+            self.state.current_session.setup_data = dict(exp.setup_data or {})
+
+            if hasattr(setup_view, "set_experiment_type"):
+                setup_view.set_experiment_type(loaded_type_id)
             exp.apply_to_setup_view(setup_view)
 
             if hasattr(run_view, "load_replay_file"):

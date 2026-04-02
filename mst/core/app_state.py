@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
+
+from mst.core.experiment_schema import default_setup_data
 
 
 @dataclass
@@ -17,6 +19,7 @@ class SimulationConfig:
 
 @dataclass
 class LastRun:
+    """专门用于存储拟合结果（Kd值、R²相关系数）。"""
     x: List[float] = field(default_factory=list)
     y: List[float] = field(default_factory=list)
     fit_kd: Optional[float] = None
@@ -24,12 +27,18 @@ class LastRun:
 
 
 @dataclass
+class ExperimentSession:
+    """实验实例数据（与实验类型定义分离）。"""
+
+    experiment_type_id: str = "pre_test"
+    setup_data: Dict[str, Any] = field(default_factory=lambda: default_setup_data("pre_test"))
+
+
+@dataclass
 class AppState:
-    """
-    用于 UI 页面间共享的最小状态容器（先模拟跑通用）。
-    """
+    """用于 UI 页面间共享状态。"""
 
     workspace_dir: Path = field(default_factory=lambda: Path.cwd())
     sim: SimulationConfig = field(default_factory=SimulationConfig)
     last_run: LastRun = field(default_factory=LastRun)
-
+    current_session: ExperimentSession = field(default_factory=ExperimentSession)
