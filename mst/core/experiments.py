@@ -12,50 +12,58 @@ import numpy as np
 @dataclass
 class Experiment:
     """
-    MST 实验数据模型（HDF5 驱动）。
-
-    HDF5 结构：
-      /raw/capillary_i
-      /processed/capillary_i_fit
-      /metadata/*
-      /protocol/*
+    MST 实验数据模型（基于 HDF5 驱动）。
+    
+    该类负责在内存中存储实验数据，并提供与 UI 界面交互以及 HDF5 文件读写的方法。
+    HDF5 文件内部结构组织如下：
+      /raw/capillary_i           - 原始毛细管荧光曲线数据
+      /processed/capillary_i_fit - 拟合后的平滑数据或处理结果
+      /metadata/* - 实验元数据（时间、操作员等）
+      /protocol/* - 实验协议参数（功率、时间设置）
+      /run/* - 运行时状态（掩码、浓度、选中的毛细管等）
     """
 
     name: str = ""
+    # 存储原始轨迹：{'capillary_1': [v1, v2, ...], ...}
     raw: Dict[str, List[float]] = field(default_factory=dict)
+    # 存储处理后的轨迹或剂量响应曲线拟合点
     processed: Dict[str, List[float]] = field(default_factory=dict)
 
+    # 实验元数据
     metadata: Dict[str, Any] = field(
         default_factory=lambda: {
-            "temperature": "",
-            "operator": "",
-            "timestamp": datetime.now().isoformat(timespec="seconds"),
-            "excitation": "",
-            "experiment_type": "",
+            "temperature": "",    # 实验温度
+            "operator": "",       # 操作人员
+            "timestamp": datetime.now().isoformat(timespec="seconds"), # 时间戳
+            "excitation": "",     # 激发光波长/类型
+            "experiment_type": "", # 实验类型
         }
     )
+    
+    # 实验仪器协议设置
     protocol: Dict[str, Any] = field(
         default_factory=lambda: {
-            "led_power": 20,
-            "mst_power": "中",
-            "time_scheme": "[]",
+            "led_power": 20,      # LED 激发功率
+            "mst_power": "中",     # 红外激光功率（通常设为 低/中/高）
+            "time_scheme": "[]",  # 时间序列方案（字符串化存储）
         }
     )
 
-    # 运行数据快照（用于回填 Results）
+    # 运行数据快照（用于保存当前分析状态，以便回填到结果视图）
     run_data: Dict[str, Any] = field(
         default_factory=lambda: {
-            "enabled_mask": [],
-            "t": [],
-            "concentrations": [],
-            "feature_y": [],
-            "selected_capillary": 0,
-            "t1_s": 2.0,
+            "enabled_mask": [],      # 布尔列表，标记哪些毛细管参与分析
+            "t": [],                 # 时间轴数据
+            "concentrations": [],    # 样本浓度梯度列表
+            "feature_y": [],         # 计算出的响应值（如 Fnorm）
+            "selected_capillary": 0, # 当前视图选中的毛细管索引
+            "t1_s": 2.0,             # MST 分析的时间点设置
         }
     )
 
     @staticmethod
     def _safe_float(value: Any, default: float = 0.0) -> float:
+        """安全转换浮点数，失败时返回默认值"""
         try:
             return float(value)
         except (TypeError, ValueError):
@@ -63,14 +71,17 @@ class Experiment:
 
     @classmethod
     def from_ui(cls, *, name: str, setup_params: Dict[str, Any], excitation: str, experiment_type: str) -> "Experiment":
+        """工厂方法：根据 UI 层的初始设置参数创建一个新的 Experiment 对象"""
         exp = cls(name=name)
 
+        # 填充元数据
         exp.metadata["temperature"] = setup_params.get("temperature", "")
         exp.metadata["operator"] = setup_params.get("operator", "")
         exp.metadata["timestamp"] = datetime.now().isoformat(timespec="seconds")
         exp.metadata["excitation"] = excitation or ""
         exp.metadata["experiment_type"] = experiment_type or ""
 
+        # 填充协议设置
         exp.protocol["led_power"] = int(setup_params.get("excitation_pct", 20) or 20)
         exp.protocol["mst_power"] = setup_params.get("mst_power", "中") or "中"
         exp.protocol["time_scheme"] = setup_params.get("time_scheme", "[]") or "[]"
@@ -78,13 +89,16 @@ class Experiment:
         return exp
 
     def capture_from_run_view(self, run_view: Any) -> None:
+        """从运行分析视图 (RunView) 中捕获实时数据到本模型中"""
         if run_view is None:
             return
 
+        # 获取视图模型 ViewModel
         vm = getattr(run_view, "vm", None)
         if vm is None:
             return
 
+        # 1. 捕获原始曲线数据 (Traces)
         traces = getattr(vm, "traces", []) or []
         self.raw = {
             f"capillary_{i + 1}": [float(v) for v in trace]
@@ -92,17 +106,20 @@ class Experiment:
             if trace
         }
 
+        # 2. 捕获处理后的拟合曲线
         self.processed = {
             f"capillary_{i + 1}_fit": [float(v) for v in trace]
             for i, trace in enumerate(traces)
             if trace
         }
 
+        # 如果存在剂量响应拟合 (Dose-Response Fit)，则捕获
         fit = getattr(vm, "fit", None)
         if fit is not None:
             self.processed["dose_response_x_fit"] = [float(v) for v in getattr(fit, "x_fit", [])]
             self.processed["dose_response_y_fit"] = [float(v) for v in getattr(fit, "y_fit", [])]
 
+        # 3. 捕获运行时状态
         self.run_data = {
             "enabled_mask": [bool(v) for v in (getattr(vm, "enabled_mask", []) or [])],
             "t": [float(v) for v in (getattr(vm, "t", []) or [])],
@@ -113,12 +130,14 @@ class Experiment:
         }
 
     def apply_to_setup_view(self, setup_view: Any) -> None:
+        """将模型中的协议参数应用回设置界面 (SetupView)"""
         if setup_view is None:
             return
 
         led = int(self.protocol.get("led_power", 20) or 20)
         mst = str(self.protocol.get("mst_power", "中") or "中")
 
+        # 更新 UI 控件的值
         if hasattr(setup_view, "spin_excitation"):
             setup_view.spin_excitation.setValue(max(10, min(100, led)))
         if hasattr(setup_view, "cmb_mst"):
@@ -127,6 +146,7 @@ class Experiment:
                 setup_view.cmb_mst.setCurrentIndex(idx)
 
     def apply_to_run_view(self, run_view: Any) -> None:
+        """将加载的实验数据还原到运行/分析界面 (RunView) 中进行重现"""
         if run_view is None:
             return
 
@@ -134,35 +154,40 @@ class Experiment:
         if vm is None:
             return
 
-        vm.stop()
+        vm.stop() # 停止当前可能正在运行的任务
 
+        # 获取保存的数据
         t = self.run_data.get("t", []) or []
         caps = self.run_data.get("enabled_mask", []) or []
         concentrations = self.run_data.get("concentrations", []) or []
         feature_y = self.run_data.get("feature_y", []) or []
 
+        # 还原时间轴和原始曲线
         vm.t = [float(v) for v in t]
         vm.traces = [
             [float(v) for v in self.raw.get(f"capillary_{i + 1}", [])]
             for i in range(vm.n_capillaries)
         ]
+        # 根据曲线最后一点还原扫描中心参考值
         vm.scan_center = [trace[-1] if trace else 0.0 for trace in vm.traces]
 
+        # 还原有效性掩码
         if caps and len(caps) == vm.n_capillaries:
             vm.enabled_mask = [bool(v) for v in caps]
         else:
             vm.enabled_mask = [True] * vm.n_capillaries
 
+        # 还原分析状态
         vm.selected_capillary = int(self.run_data.get("selected_capillary", 0) or 0)
         vm.t1_s = float(self.run_data.get("t1_s", 2.0) or 2.0)
         vm.concentrations = [float(v) for v in concentrations]
         vm.feature_y = [float(v) for v in feature_y]
 
+        # 还原剂量响应拟合对象
         fit_x = self.processed.get("dose_response_x_fit", [])
         fit_y = self.processed.get("dose_response_y_fit", [])
         if fit_x and fit_y and len(fit_x) == len(fit_y):
             from mst.ui.viewmodels.run_analysis_vm import DoseFit
-
             vm.fit = DoseFit(
                 x_fit=[float(v) for v in fit_x],
                 y_fit=[float(v) for v in fit_y],
@@ -171,35 +196,45 @@ class Experiment:
         else:
             vm.fit = None
 
+        # 更新 UI 上的数值输入框
         if hasattr(run_view, "spin_t1"):
-            run_view.spin_t1.blockSignals(True)
+            run_view.spin_t1.blockSignals(True) # 阻止信号以防触发重复计算
             run_view.spin_t1.setValue(vm.t1_s)
             run_view.spin_t1.blockSignals(False)
 
+        # 触发界面重新渲染
         if hasattr(run_view, "_render"):
             run_view._render()
 
     def save_h5(self, path: str | Path) -> None:
+        """将当前的 Experiment 对象保存到 HDF5 文件中"""
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
 
         with h5py.File(p, "w") as f:
+            utf8_dtype = h5py.string_dtype(encoding="utf-8")
+
+            # 保存原始轨迹数据
             g_raw = f.create_group("raw")
             for name, values in self.raw.items():
                 g_raw.create_dataset(name, data=np.asarray(values, dtype=np.float64))
 
+            # 保存处理后的数据
             g_processed = f.create_group("processed")
             for name, values in self.processed.items():
                 g_processed.create_dataset(name, data=np.asarray(values, dtype=np.float64))
 
+            # 保存元数据（UTF-8）
             g_meta = f.create_group("metadata")
             for k, v in self.metadata.items():
-                g_meta.create_dataset(k, data=np.bytes_(str(v)))
+                g_meta.create_dataset(k, data=str(v), dtype=utf8_dtype)
 
+            # 保存协议数据（UTF-8）
             g_protocol = f.create_group("protocol")
             for k, v in self.protocol.items():
-                g_protocol.create_dataset(k, data=np.bytes_(str(v)))
+                g_protocol.create_dataset(k, data=str(v), dtype=utf8_dtype)
 
+            # 保存分析运行数据
             g_run = f.create_group("run")
             g_run.create_dataset("enabled_mask", data=np.asarray(self.run_data.get("enabled_mask", []), dtype=np.int8))
             g_run.create_dataset("t", data=np.asarray(self.run_data.get("t", []), dtype=np.float64))
@@ -210,28 +245,33 @@ class Experiment:
 
     @classmethod
     def load_h5(cls, path: str | Path) -> "Experiment":
+        """从指定的 HDF5 文件加载 Experiment 对象"""
         p = Path(path)
-        exp = cls(name=p.stem)
+        exp = cls(name=p.stem) # 默认使用文件名作为实验名
 
         if not p.exists():
             return exp
 
         with h5py.File(p, "r") as f:
+            # 加载原始数据
             if "raw" in f:
                 exp.raw = {
                     k: np.asarray(f["raw"][k], dtype=float).reshape(-1).tolist()
                     for k in f["raw"].keys()
                 }
+            # 加载处理数据
             if "processed" in f:
                 exp.processed = {
                     k: np.asarray(f["processed"][k], dtype=float).reshape(-1).tolist()
                     for k in f["processed"].keys()
                 }
+            # 加载元数据并解码字节
             if "metadata" in f:
                 exp.metadata = {
                     k: f["metadata"][k][()].decode("utf-8") if isinstance(f["metadata"][k][()], (bytes, np.bytes_)) else str(f["metadata"][k][()])
                     for k in f["metadata"].keys()
                 }
+            # 加载协议并转换特定字段类型
             if "protocol" in f:
                 protocol: Dict[str, Any] = {}
                 for k in f["protocol"].keys():
@@ -243,6 +283,7 @@ class Experiment:
                         protocol[k] = text
                 exp.protocol = protocol
 
+            # 加载运行状态数据
             if "run" in f:
                 g = f["run"]
                 exp.run_data = {

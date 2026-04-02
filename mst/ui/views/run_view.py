@@ -24,6 +24,7 @@ from PySide6.QtWidgets import (
     QComboBox,
 )
 
+from mst.core.data_manager import DataManager
 from mst.ui.viewmodels.run_analysis_vm import RunAnalysisViewModel
 from mst.ui.widgets import CapillaryScanPlot, MSTTracePlot, DoseResponsePlot
 
@@ -42,9 +43,7 @@ from .ui_style import (
 
 # ── 串口相关（可选依赖，不影响模拟模式）─────────────────────────────────────
 try:
-    from mst.device.serial_worker import SerialWorker
     from mst.device.protocol import DataSample, MSTDataSample, N_CHANNELS
-    from mst.device.transport import SerialTransport
     _SERIAL_AVAILABLE = True
 except ImportError:
     _SERIAL_AVAILABLE = False
@@ -294,9 +293,16 @@ class RunView(QWidget):
         self._sim_timer.setInterval(80)
         self._sim_timer.timeout.connect(self._on_tick)
 
-        # ── 串口模式 ─────────────────────────────────────────────────────
-        self._serial_worker: Optional["SerialWorker"] = None
-        self._serial_buf    = _SerialBuffer()
+        # ── 数据管理器（统一实时/回放数据源）────────────────────────────
+        self.data_manager = DataManager(self)
+        self.data_manager.data_ready.connect(self._on_serial_data)
+        self.data_manager.status_changed.connect(self._set_ser_status_ok)
+        self.data_manager.error_occurred.connect(self._set_ser_status_err)
+        self.data_manager.debug_stats.connect(self._on_serial_debug_stats)
+        self.data_manager.finished.connect(self._on_serial_worker_finished)
+
+        # ── 串口模式状态 ─────────────────────────────────────────────────
+        self._serial_buf = _SerialBuffer()
         self._serial_error_count = 0
         self._serial_last_error = ""
         self._serial_rx_bytes = 0
@@ -661,7 +667,7 @@ class RunView(QWidget):
         if not _SERIAL_AVAILABLE:
             return
         try:
-            ports = SerialTransport.list_ports()
+            ports = DataManager.list_serial_ports()
         except Exception:
             ports = []
         self.cmb_port.clear()
@@ -685,13 +691,8 @@ class RunView(QWidget):
         self._serial_paused = False
         self._update_serial_debug()
 
-        self._serial_worker = SerialWorker(port=port, baudrate=baud, parent=self)
-        self._serial_worker.data_ready.connect(self._on_serial_data)
-        self._serial_worker.status_changed.connect(self._set_ser_status_ok)
-        self._serial_worker.error_occurred.connect(self._set_ser_status_err)
-        self._serial_worker.debug_stats.connect(self._on_serial_debug_stats)
-        self._serial_worker.finished.connect(self._on_serial_worker_finished)
-        self._serial_worker.start()
+        self.data_manager.use_realtime_serial(port=port, baudrate=baud)
+        self.data_manager.start()
 
         self.btn_ser_connect.setEnabled(False)
         self.btn_ser_stop.setEnabled(True)
@@ -701,10 +702,7 @@ class RunView(QWidget):
 
     def _on_serial_stop(self) -> None:
         self._render_timer.stop()
-        if self._serial_worker:
-            self._serial_worker.stop()
-            self._serial_worker.wait(2000)
-            self._serial_worker = None
+        self.data_manager.stop()
         self.btn_ser_connect.setEnabled(True)
         self.btn_ser_stop.setEnabled(False)
         self.btn_ser_pause.setEnabled(False)
@@ -722,18 +720,20 @@ class RunView(QWidget):
         self._serial_paused = False
 
     def _on_serial_pause(self) -> None:
-        if self._serial_worker is None or self._serial_paused:
+        if self._serial_paused:
             return
         self._serial_paused = True
+        self.data_manager.pause()
         self._render_timer.stop()
         self.btn_ser_pause.setEnabled(False)
         self.btn_ser_resume.setEnabled(True)
         self._set_ser_status("串口采集中（已暂停显示）", "warning")
 
     def _on_serial_resume(self) -> None:
-        if self._serial_worker is None or (not self._serial_paused):
+        if not self._serial_paused:
             return
         self._serial_paused = False
+        self.data_manager.resume()
         self._render_timer.start()
         self.btn_ser_pause.setEnabled(True)
         self.btn_ser_resume.setEnabled(False)
@@ -846,6 +846,19 @@ class RunView(QWidget):
             fit_curve=None,
         )
         self._update_serial_debug()
+
+    def load_replay_file(self, h5_path: str) -> None:
+        """统一回放入口：.h5 -> DataSource -> UI。"""
+        self._serial_buf.clear()
+        self._switch_mode("serial")
+        self.data_manager.use_h5_replay(h5_path=h5_path, interval_ms=30)
+        self.data_manager.start()
+
+        self.btn_ser_connect.setEnabled(False)
+        self.btn_ser_stop.setEnabled(True)
+        self.btn_ser_pause.setEnabled(True)
+        self.btn_ser_resume.setEnabled(False)
+        self._render_timer.start()
 
     # ── Private helpers ───────────────────────────────────────────────────
 

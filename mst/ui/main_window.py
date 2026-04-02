@@ -92,25 +92,29 @@ class MainWindow(QMainWindow):
 
     def _on_save(self) -> None:
         if self.project_view is None:
+            QMessageBox.warning(self, "保存失败", "主界面尚未初始化，无法保存。")
             return
         if not self.current_experiment_path:
             QMessageBox.warning(self, "保存失败", "当前没有实验文件路径。")
             return
 
-        setup_view = self.project_view.content.stack.widget(0)
-        run_view = self.project_view.content.stack.widget(2)
-        setup_params = setup_view.get_params() if hasattr(setup_view, "get_params") else {}
+        try:
+            setup_view = self.project_view.content.stack.widget(0)
+            run_view = self.project_view.content.stack.widget(2)
+            setup_params = setup_view.get_params() if hasattr(setup_view, "get_params") else {}
 
-        exp = Experiment.from_ui(
-            name=Path(self.current_experiment_path).stem,
-            setup_params=setup_params,
-            excitation=self.current_excitation,
-            experiment_type=self.current_experiment_type,
-        )
-        exp.capture_from_run_view(run_view)
-        exp.save_h5(self.current_experiment_path)
+            exp = Experiment.from_ui(
+                name=Path(self.current_experiment_path).stem,
+                setup_params=setup_params,
+                excitation=self.current_excitation,
+                experiment_type=self.current_experiment_type,
+            )
+            exp.capture_from_run_view(run_view)
+            exp.save_h5(self.current_experiment_path)
 
-        QMessageBox.information(self, "保存成功", f"实验已保存到：\n{self.current_experiment_path}")
+            QMessageBox.information(self, "保存成功", f"实验已保存到：\n{self.current_experiment_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "保存失败", f"保存过程中发生错误：\n{e}")
 
     def _on_new_exp(self) -> None:
         if self.project_view:
@@ -122,7 +126,11 @@ class MainWindow(QMainWindow):
             setup_view = pv.content.stack.widget(0)
             run_view = pv.content.stack.widget(2)
             exp.apply_to_setup_view(setup_view)
-            exp.apply_to_run_view(run_view)
+
+            if hasattr(run_view, "load_replay_file"):
+                run_view.load_replay_file(path)
+            else:
+                exp.apply_to_run_view(run_view)
 
             self.current_excitation = str(exp.metadata.get("excitation", self.current_excitation) or self.current_excitation)
             self.current_experiment_type = str(exp.metadata.get("experiment_type", self.current_experiment_type) or self.current_experiment_type)
