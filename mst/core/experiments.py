@@ -93,12 +93,54 @@ class Experiment:
         if run_view is None:
             return
 
-        # 获取视图模型 ViewModel
+        mode = getattr(run_view, "_mode", "sim")
+
+        # 串口模式：从 _SerialBuffer 捕获（纯串口场景必须走这里）
+        if mode == "serial":
+            serial_buf = getattr(run_view, "_serial_buf", None)
+            if serial_buf is None:
+                return
+
+            t = [float(v) for v in serial_buf.time_list()]
+            mat = serial_buf.trace_matrix()
+            mask = getattr(serial_buf, "enabled_mask", []) or []
+
+            self.raw = {
+                f"capillary_{i + 1}": [float(v) for v in trace]
+                for i, trace in enumerate(mat)
+                if trace
+            }
+            self.processed = {
+                f"capillary_{i + 1}_fit": [float(v) for v in trace]
+                for i, trace in enumerate(mat)
+                if trace
+            }
+
+            # 串口模式下没有固定浓度，给一个占位索引
+            concentrations = list(range(len(mat)))
+            t1 = 2.0
+            if hasattr(run_view, "spin_t1_ser"):
+                try:
+                    t1 = float(run_view.spin_t1_ser.value())
+                except Exception:
+                    t1 = 2.0
+            feature_y = [float(v) for v in serial_buf.dose_y_at_t1(t1)] if mat else []
+
+            self.run_data = {
+                "enabled_mask": [bool(v) for v in mask],
+                "t": t,
+                "concentrations": [float(v) for v in concentrations],
+                "feature_y": feature_y,
+                "selected_capillary": int(getattr(getattr(run_view, "vm", None), "selected_capillary", 0) or 0),
+                "t1_s": float(t1),
+            }
+            return
+
+        # 模拟模式：从 ViewModel 捕获
         vm = getattr(run_view, "vm", None)
         if vm is None:
             return
 
-        # 1. 捕获原始曲线数据 (Traces)
         traces = getattr(vm, "traces", []) or []
         self.raw = {
             f"capillary_{i + 1}": [float(v) for v in trace]
@@ -106,20 +148,17 @@ class Experiment:
             if trace
         }
 
-        # 2. 捕获处理后的拟合曲线
         self.processed = {
             f"capillary_{i + 1}_fit": [float(v) for v in trace]
             for i, trace in enumerate(traces)
             if trace
         }
 
-        # 如果存在剂量响应拟合 (Dose-Response Fit)，则捕获
         fit = getattr(vm, "fit", None)
         if fit is not None:
             self.processed["dose_response_x_fit"] = [float(v) for v in getattr(fit, "x_fit", [])]
             self.processed["dose_response_y_fit"] = [float(v) for v in getattr(fit, "y_fit", [])]
 
-        # 3. 捕获运行时状态
         self.run_data = {
             "enabled_mask": [bool(v) for v in (getattr(vm, "enabled_mask", []) or [])],
             "t": [float(v) for v in (getattr(vm, "t", []) or [])],
