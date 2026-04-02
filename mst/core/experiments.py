@@ -58,6 +58,9 @@ class Experiment:
             "feature_y": [],         # 计算出的响应值（如 Fnorm）
             "selected_capillary": 0, # 当前视图选中的毛细管索引
             "t1_s": 2.0,             # MST 分析的时间点设置
+            "mst_t_by_ch": [],       # 串口模式每个毛细管的独立时间轴
+            "scan_x_raw": [],        # 串口扫描原始 x
+            "scan_y_raw": [],        # 串口扫描原始 y
         }
     )
 
@@ -102,6 +105,8 @@ class Experiment:
                 return
 
             t = [float(v) for v in serial_buf.time_list()]
+            t_by_ch = [[float(v) for v in ts] for ts in serial_buf.mst_times_per_channel()]
+            scan_x_raw, scan_y_raw, _ = serial_buf.scan_raw_points()
             mat = serial_buf.trace_matrix()
             mask = getattr(serial_buf, "enabled_mask", []) or []
 
@@ -133,6 +138,9 @@ class Experiment:
                 "feature_y": feature_y,
                 "selected_capillary": int(getattr(getattr(run_view, "vm", None), "selected_capillary", 0) or 0),
                 "t1_s": float(t1),
+                "mst_t_by_ch": t_by_ch,
+                "scan_x_raw": [float(v) for v in scan_x_raw],
+                "scan_y_raw": [float(v) for v in scan_y_raw],
             }
             return
 
@@ -281,6 +289,19 @@ class Experiment:
             g_run.create_dataset("feature_y", data=np.asarray(self.run_data.get("feature_y", []), dtype=np.float64))
             g_run.create_dataset("selected_capillary", data=np.asarray([self.run_data.get("selected_capillary", 0)], dtype=np.int32))
             g_run.create_dataset("t1_s", data=np.asarray([self.run_data.get("t1_s", 2.0)], dtype=np.float64))
+            g_run.create_dataset("scan_x_raw", data=np.asarray(self.run_data.get("scan_x_raw", []), dtype=np.float64))
+            g_run.create_dataset("scan_y_raw", data=np.asarray(self.run_data.get("scan_y_raw", []), dtype=np.float64))
+            mst_t_by_ch = self.run_data.get("mst_t_by_ch", []) or []
+            if mst_t_by_ch:
+                max_len = max((len(ts) for ts in mst_t_by_ch), default=0)
+                if max_len > 0:
+                    arr = np.full((len(mst_t_by_ch), max_len), np.nan, dtype=np.float64)
+                    for i, ts in enumerate(mst_t_by_ch):
+                        if not ts:
+                            continue
+                        n = min(len(ts), max_len)
+                        arr[i, :n] = np.asarray(ts[:n], dtype=np.float64)
+                    g_run.create_dataset("mst_t_by_ch", data=arr)
 
     @classmethod
     def load_h5(cls, path: str | Path) -> "Experiment":
@@ -332,6 +353,16 @@ class Experiment:
                     "feature_y": np.asarray(g.get("feature_y", []), dtype=float).reshape(-1).tolist(),
                     "selected_capillary": int(np.asarray(g.get("selected_capillary", [0]), dtype=np.int32).reshape(-1)[0]),
                     "t1_s": float(np.asarray(g.get("t1_s", [2.0]), dtype=np.float64).reshape(-1)[0]),
+                    "mst_t_by_ch": [],
+                    "scan_x_raw": np.asarray(g.get("scan_x_raw", []), dtype=np.float64).reshape(-1).tolist(),
+                    "scan_y_raw": np.asarray(g.get("scan_y_raw", []), dtype=np.float64).reshape(-1).tolist(),
                 }
+                if "mst_t_by_ch" in g:
+                    arr = np.asarray(g["mst_t_by_ch"], dtype=np.float64)
+                    t_by_ch: List[List[float]] = []
+                    for row in arr:
+                        vals = [float(v) for v in row.tolist() if np.isfinite(v)]
+                        t_by_ch.append(vals)
+                    exp.run_data["mst_t_by_ch"] = t_by_ch
 
         return exp

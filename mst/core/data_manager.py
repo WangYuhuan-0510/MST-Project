@@ -131,39 +131,63 @@ class H5ReplayDataSource(BaseDataSource):
         for i in range(n_ch):
             traces.append([float(v) for v in raw.get(f"capillary_{i + 1}", [])])
 
+        t_by_ch = exp.run_data.get("mst_t_by_ch", []) or []
+        scan_x_raw = [float(v) for v in (exp.run_data.get("scan_x_raw", []) or [])]
+        scan_y_raw = [float(v) for v in (exp.run_data.get("scan_y_raw", []) or [])]
+
         self._samples = []
 
-        # 先注入一帧“扫描阶段”样本，保证 Capillary Scan 可重现
+        # 注入扫描阶段样本，逐点还原 scan_x_raw / scan_y_raw。
+        #
+        # 原代码的两个 bug：
+        #   Bug 1 — distance=float(i)+0.5：用通道整数索引代替真实 dist(0~15mm)，
+        #            导致 CapillaryScanPlot 的动态峰位拟合收到错误坐标，
+        #            ch=7 以后全部错位（15.5 超出 0~15 范围映射到 ch=15）。
+        #   Bug 2 — fluo=int(trace_i[-1])：取 MST 曲线末值（~800-1000），
+        #            不是扫描峰值（~138），重开后图像变成平坦高线而非高斯峰。
+        #
+        # 修复：从 h5 读回保存的原始扫描点（scan_x_raw / scan_y_raw），
+        #       按原始顺序逐点重放 mst_stream=False 的帧，
+        #       与实时串口行为完全一致，CapillaryScanPlot 自动重现高斯峰。
         min_t = min(t_axis)
         scan_t_ms = int(min_t * 1000.0) - 1
-        for i in range(n_ch):
-            trace_i = traces[i]
-            if not trace_i:
-                continue
-            self._samples.append(
-                MSTDataSample(
-                    t_ms=scan_t_ms,
-                    distance=float(i) + 0.5,
-                    fluo=int(max(trace_i)),
-                    reserved=0,
-                    ir_on=False,
-                    mst_stream=False,
+
+        if scan_x_raw and scan_y_raw:
+            n_scan = min(len(scan_x_raw), len(scan_y_raw))
+            for k in range(n_scan):
+                self._samples.append(
+                    MSTDataSample(
+                        t_ms=scan_t_ms,
+                        distance=float(scan_x_raw[k]),
+                        fluo=int(scan_y_raw[k]),
+                        reserved=0,
+                        ir_on=False,
+                        mst_stream=False,
+                    )
                 )
+        else:
+            # 降级回退：h5 中没有 scan_x_raw（旧版本保存的文件）
+            # 只记录警告，不注入伪造扫描帧，避免误导用户
+            _LOG.warning(
+                "H5ReplayDataSource: scan_x_raw/scan_y_raw not found in h5 "
+                "(legacy file), capillary scan will not be replayed"
             )
         for j, t_s in enumerate(t_axis):
             # 直接使用保存的 t(s) 还原为 ms，避免横轴右移
-            t_ms = int(t_s * 1000.0)
+            t_ms_default = int(t_s * 1000.0)
             for i in range(n_ch):
                 if j >= len(traces[i]):
                     continue
                 fluo = int(traces[i][j])
+                ch_ts = t_by_ch[i] if i < len(t_by_ch) else []
+                t_ms = int(ch_ts[j] * 1000.0) if j < len(ch_ts) else t_ms_default
                 distance = float(i) + 0.5
                 self._samples.append(
                     MSTDataSample(
                         t_ms=t_ms,
                         distance=distance,
                         fluo=fluo,
-                        reserved=3,
+                        reserved=0x80000003,
                         ir_on=True,
                         mst_stream=True,
                     )

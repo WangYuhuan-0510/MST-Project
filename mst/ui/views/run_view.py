@@ -134,6 +134,8 @@ class _SerialBuffer:
             dist = float(sample.distance)
             ir_on = bool(getattr(sample, "ir_on", False))
             mst_stream = bool(getattr(sample, "mst_stream", False))
+            reserved = int(getattr(sample, "reserved", 0))
+            abs_t_replay = bool(reserved & 0x80000000)
 
             self._dist_min = dist if self._dist_min is None else min(self._dist_min, dist)
             self._dist_max = dist if self._dist_max is None else max(self._dist_max, dist)
@@ -171,12 +173,18 @@ class _SerialBuffer:
                     self.scan_frozen = True
 
                 if mst_stream:
-                    self._enter_mst_stream(t_ms)
+                    if not abs_t_replay:
+                        self._enter_mst_stream(t_ms)
+                    else:
+                        self._mst_stream_active = True
                 elif ir_on:
-                    self._enter_mst_legacy_ir(t_ms)
+                    if not abs_t_replay:
+                        self._enter_mst_legacy_ir(t_ms)
+                    else:
+                        self._ir_seen = True
 
                 if mst_stream or ir_on:
-                    t_plot = self._mst_time_s(t_ms)
+                    t_plot = (t_ms / 1000.0) if abs_t_replay else self._mst_time_s(t_ms)
                     self.mst_traces[idx].append(float(sample.fluo))
                     self.mst_t_by_ch[idx].append(t_plot)
         else:

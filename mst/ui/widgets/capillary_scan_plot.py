@@ -143,7 +143,7 @@ class CapillaryScanPlot(QWidget):
         x_dense = np.linspace(0.5, 16.5, 600)
         y_dense = np.zeros_like(x_dense)
         for i, amp in enumerate(ys):
-            mu = float(i + 1)
+            mu = float(i + 1)  # 关键：峰顶与 1~16 索引严格对齐
             y_dense += amp * np.exp(-((x_dense - mu) ** 2) / (2 * sigma * sigma))
 
         self._scan_xs = x_dense.tolist()
@@ -156,6 +156,8 @@ class CapillaryScanPlot(QWidget):
 
         if self._scan_xs:
             self._ax.plot(self._scan_xs, self._scan_ys, color="#1f77b4", lw=1.2, alpha=0.85)
+            ymax = max(180.0, max(self._scan_ys) * 1.1)
+            self._ax.set_ylim(0, ymax)
 
         self._canvas.draw_idle()
 
