@@ -12,6 +12,8 @@ project_view.py
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
     QStackedWidget, QFrame, QScrollArea, QSizePolicy, QSpacerItem,
@@ -68,8 +70,12 @@ class ActionButton(QPushButton):
 #  Sidebar: experiment list item
 # ─────────────────────────────────────────────
 class ExperimentItem(QPushButton):
-    def __init__(self, name: str, status: str = "draft", parent=None):
+    clicked_experiment = Signal(str)
+
+    def __init__(self, name: str, status: str = "draft", experiment_id: str | None = None, parent=None):
         super().__init__(parent)
+        self.experiment_id = str(experiment_id or "").strip()
+        self.experiment_name = name
         self.setCheckable(True)
         self.setFixedHeight(52)
         self.setCursor(Qt.PointingHandCursor)
@@ -278,6 +284,8 @@ class InstructionsPage(QScrollArea):
 #  Left Sidebar
 # ─────────────────────────────────────────────
 class Sidebar(QWidget):
+    experiment_selected = Signal(str)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedWidth(SIDEBAR_W)
@@ -319,27 +327,42 @@ class Sidebar(QWidget):
         root.addSpacerItem(QSpacerItem(0, 8))
 
         self._exp_buttons: list[ExperimentItem] = []
-        for name, status in [
-            ("Exp-001: Baseline",   "done"),
-            ("Exp-002: Variable A", "running"),
-            ("Exp-003: Variable B", "draft"),
-            ("Exp-004: Control",    "failed"),
-        ]:
-            btn = ExperimentItem(name, status)
-            btn.clicked.connect(lambda _, b=btn: self._select_exp(b))
-            self._exp_buttons.append(btn)
-            root.addWidget(btn)
+        self._exp_container = QWidget()
+        self._exp_layout = QVBoxLayout(self._exp_container)
+        self._exp_layout.setContentsMargins(0, 0, 0, 0)
+        self._exp_layout.setSpacing(0)
+        root.addWidget(self._exp_container)
 
         root.addStretch()
         self.new_btn = NewExperimentButton()
         root.addWidget(self.new_btn)
 
-        if self._exp_buttons:
-            self._exp_buttons[0].setChecked(True)
-
     def _select_exp(self, selected: ExperimentItem) -> None:
         for btn in self._exp_buttons:
             btn.setChecked(btn is selected)
+        if selected.experiment_id:
+            self.experiment_selected.emit(selected.experiment_id)
+
+    def set_experiments(self, experiments: list[tuple[str, str, str]]) -> None:
+        while self._exp_layout.count():
+            item = self._exp_layout.takeAt(0)
+            if item.widget():
+                item.widget().deleteLater()
+
+        self._exp_buttons = []
+        for experiment_id, name, status in experiments:
+            btn = ExperimentItem(name, status, experiment_id=experiment_id)
+            btn.clicked.connect(lambda _, b=btn: self._select_exp(b))
+            self._exp_buttons.append(btn)
+            self._exp_layout.addWidget(btn)
+
+        if self._exp_buttons:
+            self._exp_buttons[0].setChecked(True)
+
+    def select_experiment(self, experiment_id: str) -> None:
+        wanted = str(experiment_id or "").strip()
+        for btn in self._exp_buttons:
+            btn.setChecked(btn.experiment_id == wanted)
 
 
 # ─────────────────────────────────────────────
@@ -607,6 +630,12 @@ class ProjectView(QWidget):
         self.sidebar.save_btn.clicked.connect(self._on_save)
         self.sidebar.close_btn.clicked.connect(self._on_close)
         self.sidebar.new_btn.clicked.connect(self._on_new_experiment)
+
+    def set_experiments(self, experiments: list[tuple[str, str, str]]) -> None:
+        self.sidebar.set_experiments(experiments)
+
+    def select_experiment(self, experiment_id: str) -> None:
+        self.sidebar.select_experiment(experiment_id)
 
     def _on_save(self) -> None:
         print("[ProjectView] Save triggered")

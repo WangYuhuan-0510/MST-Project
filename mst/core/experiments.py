@@ -4,6 +4,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
+from uuid import uuid4
 
 import h5py
 import numpy as np
@@ -24,6 +25,7 @@ class Experiment:
       /run/* - 运行时状态（掩码、浓度、选中的毛细管等）
     """
 
+    id: str = field(default_factory=lambda: uuid4().hex)
     name: str = ""
     # 存储原始轨迹：{'capillary_1': [v1, v2, ...], ...}
     raw: Dict[str, List[float]] = field(default_factory=dict)
@@ -33,6 +35,7 @@ class Experiment:
     # 实验元数据
     metadata: Dict[str, Any] = field(
         default_factory=lambda: {
+            "experiment_id": uuid4().hex,
             "temperature": "",    # 实验温度
             "operator": "",       # 操作人员
             "timestamp": datetime.now().isoformat(timespec="seconds"), # 时间戳
@@ -69,6 +72,13 @@ class Experiment:
         }
     )
 
+    def __post_init__(self) -> None:
+        metadata_id = str(self.metadata.get("experiment_id") or "").strip()
+        if metadata_id:
+            self.id = metadata_id
+        else:
+            self.metadata["experiment_id"] = self.id
+
     @staticmethod
     def _safe_float(value: Any, default: float = 0.0) -> float:
         """安全转换浮点数，失败时返回默认值"""
@@ -86,9 +96,11 @@ class Experiment:
         excitation: str,
         experiment_type: str,
         experiment_type_id: str | None = None,
+        experiment_id: str | None = None,
     ) -> "Experiment":
         """工厂方法：根据 UI 层参数创建 Experiment。"""
-        exp = cls(name=name)
+        exp = cls(id=str(experiment_id).strip() if experiment_id else uuid4().hex, name=name)
+        exp.metadata["experiment_id"] = exp.id
 
         type_id = normalize_experiment_type_id(experiment_type_id or experiment_type)
         type_cfg = get_experiment_type_config(type_id)
@@ -97,7 +109,7 @@ class Experiment:
         exp.setup_data = default_setup_data(type_id)
         exp.setup_data.update(setup_params or {})
 
-        # 填充元数据
+        # 填充元数据：管理、识别、复现实验
         exp.metadata["temperature"] = str(exp.setup_data.get("temperature", "") or "")
         exp.metadata["operator"] = str(exp.setup_data.get("operator", "") or "")
         exp.metadata["timestamp"] = datetime.now().isoformat(timespec="seconds")
@@ -105,7 +117,7 @@ class Experiment:
         exp.metadata["experiment_type_id"] = type_id
         exp.metadata["experiment_type"] = type_cfg.get("name", experiment_type or "Pre-test")
 
-        # 填充协议设置
+        # 填充协议设置：控制设备采集、运行的参数
         exp.protocol["led_power"] = int(exp.setup_data.get("excitation_pct", 20) or 20)
         exp.protocol["mst_power"] = str(exp.setup_data.get("mst_power", "中") or "中")
         exp.protocol["time_scheme"] = str(exp.setup_data.get("time_scheme", "[]") or "[]")
@@ -283,6 +295,7 @@ class Experiment:
         """将当前的 Experiment 对象保存到 HDF5 文件中"""
         p = Path(path)
         p.parent.mkdir(parents=True, exist_ok=True)
+        self.metadata["experiment_id"] = self.id
 
         with h5py.File(p, "w") as f:
             utf8_dtype = h5py.string_dtype(encoding="utf-8")
@@ -365,6 +378,8 @@ class Experiment:
                 exp.metadata["experiment_type_id"] = normalize_experiment_type_id(
                     str(exp.metadata.get("experiment_type_id") or exp.metadata.get("experiment_type") or "pre_test")
                 )
+                exp.id = str(exp.metadata.get("experiment_id") or exp.id)
+                exp.metadata["experiment_id"] = exp.id
             # 加载协议并转换特定字段类型
             if "protocol" in f:
                 protocol: Dict[str, Any] = {}
@@ -409,4 +424,5 @@ class Experiment:
                         t_by_ch.append(vals)
                     exp.run_data["mst_t_by_ch"] = t_by_ch
 
+        exp.metadata.setdefault("experiment_id", exp.id)
         return exp

@@ -857,7 +857,7 @@ class RunView(QWidget):
 
     def load_replay_file(self, h5_path: str) -> None:
         """统一回放入口：.h5 -> DataSource -> UI。"""
-        self._serial_buf.clear()
+        self.clear_view_state()
         self._switch_mode("serial")
         self.data_manager.use_h5_replay(h5_path=h5_path, interval_ms=30)
         self.data_manager.start()
@@ -876,6 +876,36 @@ class RunView(QWidget):
     def _set_status(self, text: str, color_key: str = "text_muted") -> None:
         self.lbl_status.setText(text)
         self.lbl_status.setStyleSheet(label_style(12, 500, color_key))
+
+    def clear_view_state(self) -> None:
+        self._sim_timer.stop()
+        self._render_timer.stop()
+        self.vm.stop()
+        if hasattr(self.vm, "clear"):
+            self.vm.clear()
+        self._serial_buf.clear()
+        self._serial_error_count = 0
+        self._serial_last_error = ""
+        self._serial_rx_bytes = 0
+        self._serial_rx_chunks = 0
+        self._serial_ok_frames = 0
+        self._serial_bad_frames = 0
+        self._serial_last_chunk_hex = "-"
+        self._serial_port_echo = "-"
+        self._serial_paused = False
+        self.btn_start.setEnabled(True)
+        self.btn_stop.setEnabled(False)
+        self.btn_pause.setEnabled(False)
+        self.btn_resume.setEnabled(False)
+        self.btn_ser_connect.setEnabled(True)
+        self.btn_ser_stop.setEnabled(False)
+        self.btn_ser_pause.setEnabled(False)
+        self.btn_ser_resume.setEnabled(False)
+        self._set_status("就绪", "text_muted")
+        self._set_ser_status("未连接", "text_muted")
+        self._update_serial_debug()
+        self._render()
+        self._render_serial()
 
     # ── Public slots ──────────────────────────────────────────────────────
 

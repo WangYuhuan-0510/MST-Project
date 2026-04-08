@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Optional
+from uuid import uuid4
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
@@ -273,7 +274,49 @@ class DataManager(QObject):
 
     def __init__(self, parent: Optional[QObject] = None) -> None:
         super().__init__(parent)
-        self._source: Optional[BaseDataSource] = None
+        self._source = None
+        self.current_experiment: Optional[Experiment] = None
+        self.current_h5_path: Optional[str] = None
+        self.current_experiment_id: Optional[str] = None
+
+    @staticmethod
+    def experiment_dir_for_path(path: str | Path) -> Path:
+        p = Path(path)
+        if p.suffix.lower() == ".h5":
+            return p.parent
+        return p
+
+    @staticmethod
+    def build_experiment_paths(base_dir: str | Path) -> dict[str, Path]:
+        root = DataManager.experiment_dir_for_path(base_dir)
+        return {
+            "root": root,
+            "raw_h5": root / "raw.h5",
+            "result_json": root / "result.json",  # export-only，不参与系统内状态恢复
+            "experiment_h5": root / "experiment.h5",
+        }
+
+    def bind_experiment(self, experiment: Experiment, *, base_dir: str | Path) -> None:
+        self.stop()
+        self._source = None
+        paths = self.build_experiment_paths(base_dir)
+        self.current_experiment = experiment
+        self.current_experiment_id = experiment.id
+        self.current_h5_path = str(paths["experiment_h5"])
+        _LOG.info(
+            "DataManager.bind_experiment id=%s dir=%s h5=%s",
+            self.current_experiment_id,
+            paths["root"],
+            self.current_h5_path,
+        )
+
+    def bind_experiment_by_id(self, experiment_id: str, *, project_dir: str | Path, name: str | None = None) -> dict[str, Path]:
+        safe_id = str(experiment_id).strip() or uuid4().hex
+        exp_dir = self.experiment_dir_for_path(project_dir) / safe_id
+        experiment = Experiment(id=safe_id, name=name or safe_id)
+        experiment.metadata["experiment_id"] = safe_id
+        self.bind_experiment(experiment, base_dir=exp_dir)
+        return self.build_experiment_paths(exp_dir)
 
     @staticmethod
     def list_serial_ports() -> list[str]:
@@ -327,3 +370,25 @@ class DataManager(QObject):
         source.error_occurred.connect(self.error_occurred.emit)
         source.debug_stats.connect(self.debug_stats.emit)
         source.finished.connect(self.finished.emit)
+    
+    # 新建实验
+    def new_experiment(self, name: str, path: str, experiment_id: str | None = None):
+        exp = Experiment(id=str(experiment_id).strip() if experiment_id else uuid4().hex, name=name)
+        exp.metadata["experiment_id"] = exp.id
+        self.bind_experiment(exp, base_dir=self.experiment_dir_for_path(path))
+
+    # 打开实验
+    def load_experiment(self, path: str):
+        exp = Experiment.load_h5(path)
+        self.bind_experiment(exp, base_dir=self.experiment_dir_for_path(path))
+
+    # 保存实验
+    def save_current_experiment(self, run_view):
+        if self.current_experiment is None or self.current_h5_path is None:
+            return
+        # 从 UI 抓数据
+        self.current_experiment.capture_from_run_view(run_view)
+        self.current_experiment.metadata["experiment_id"] = self.current_experiment.id
+        # 保存到自己的文件
+        self.current_experiment.save_h5(self.current_h5_path)
+    

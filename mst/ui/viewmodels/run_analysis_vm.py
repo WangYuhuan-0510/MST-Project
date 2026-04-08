@@ -104,6 +104,21 @@ class RunAnalysisViewModel(QObject):
         self._running = False
         self.changed.emit()
 
+    def clear(self) -> None:
+        self._running = False
+        self.selected_capillary = 0
+        self.enabled_mask = [True] * self.n_capillaries
+        self.scan_center = [0.0] * self.n_capillaries
+        self.t = []
+        self.traces = [[] for _ in range(self.n_capillaries)]
+        self.concentrations = []
+        self.feature_y = []
+        self.fit = None
+        self._sim_time_s = -5.0
+        self.changed.emit()
+        self.selected_capillary_changed.emit(self.selected_capillary)
+        self.t1_changed.emit(float(self.t1_s))
+
     def tick(self) -> None:
         if not self._running:
             return
