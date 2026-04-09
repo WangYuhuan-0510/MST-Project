@@ -6,6 +6,8 @@ experiment_setup_view.py  （Plan 页面）
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout,
     QSpinBox, QPushButton, QLabel,
@@ -17,10 +19,14 @@ from .ui_style import (
     PALETTE,
     primary_btn_style,
     secondary_btn_style,
-    spinbox_style,
     label_style,
     divider,
 )
+
+
+ICON_DIR = Path(__file__).resolve().parent / "icons"
+COMBO_ARROW_ICON = str((ICON_DIR / "combo_down_black.svg").resolve()).replace("\\", "/")
+SPIN_UP_ARROW_ICON = str((ICON_DIR / "combo_up_black.svg").resolve()).replace("\\", "/")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -66,20 +72,75 @@ def _combo_style() -> str:
             border-radius: 6px;
             color: {PALETTE['text_primary']};
             font-size: 13px;
-            padding: 4px 10px;
+            padding: 4px 30px 4px 10px;
             min-height: 28px;
         }}
         QComboBox:focus {{
             border: 1px solid {PALETTE['border_active']};
         }}
         QComboBox::drop-down {{
-            border: none; width: 24px;
+            subcontrol-origin: padding;
+            subcontrol-position: top right;
+            width: 24px;
+            border: none;
+            background: transparent;
+        }}
+        QComboBox::down-arrow {{
+            image: url({COMBO_ARROW_ICON});
+            width: 12px;
+            height: 12px;
+            margin-right: 8px;
         }}
         QComboBox QAbstractItemView {{
             background: {PALETTE['bg_card']};
             border: 1px solid {PALETTE['border']};
             color: {PALETTE['text_primary']};
             selection-background-color: {PALETTE['bg_active']};
+        }}
+    """
+
+
+def _spinbox_style() -> str:
+    return f"""
+        QSpinBox {{
+            background: {PALETTE['bg_card']};
+            border: 1px solid {PALETTE['border']};
+            border-radius: 6px;
+            color: {PALETTE['text_primary']};
+            font-size: 13px;
+            padding: 4px 30px 4px 8px;
+            min-height: 28px;
+        }}
+        QSpinBox:focus {{
+            border: 1px solid {PALETTE['border_active']};
+        }}
+        QSpinBox::up-button, QSpinBox::down-button {{
+            subcontrol-origin: border;
+            width: 18px;
+            border: none;
+            background: transparent;
+        }}
+        QSpinBox::up-button {{
+            subcontrol-position: top right;
+            height: 14px;
+        }}
+        QSpinBox::down-button {{
+            subcontrol-position: bottom right;
+            height: 14px;
+        }}
+        QSpinBox::up-arrow {{
+            image: url({SPIN_UP_ARROW_ICON});
+            width: 10px;
+            height: 10px;
+            margin-top: 2px;
+            margin-right: 6px;
+        }}
+        QSpinBox::down-arrow {{
+            image: url({COMBO_ARROW_ICON});
+            width: 10px;
+            height: 10px;
+            margin-bottom: 2px;
+            margin-right: 6px;
         }}
     """
 
@@ -443,7 +504,7 @@ class ExperimentSetupView(QScrollArea):
         self.spin_excitation.setValue(20)
         self.spin_excitation.setSuffix(" %")
         self.spin_excitation.setFixedWidth(84)
-        self.spin_excitation.setStyleSheet(spinbox_style())
+        self.spin_excitation.setStyleSheet(_spinbox_style())
         self.spin_excitation.setEnabled(True)
         ex_ctrl.addWidget(self.chk_auto)
         ex_ctrl.addWidget(self.spin_excitation)
@@ -486,7 +547,7 @@ class ExperimentSetupView(QScrollArea):
         self.btn_apply = QPushButton("应用")
         self.btn_apply.setFixedHeight(38)
         self.btn_apply.setStyleSheet(primary_btn_style())
-        self.btn_apply.clicked.connect(self.apply_current_experiment_plan)
+        self.btn_apply.clicked.connect(self.apply_to_state)
         self.status_lbl = QLabel("")
         self.status_lbl.setStyleSheet(
             f"color: {PALETTE['success']}; font-size: 12px; font-weight: 500;"
@@ -573,51 +634,3 @@ class ExperimentSetupView(QScrollArea):
             "excitation_pct":    self.spin_excitation.value(),
             "mst_power":         self.cmb_mst.currentText(),   # 低 / 中 / 高
         }
-
-    def set_data(self, data: dict) -> None:
-        if not isinstance(data, dict):
-            return
-
-        def _set_combo(combo: QComboBox, value: object) -> None:
-            text = str(value or "")
-            idx = combo.findText(text)
-            if idx >= 0:
-                combo.setCurrentIndex(idx)
-
-        _set_combo(self.cmb_target, data.get("target"))
-        self.chk_histag.setChecked(bool(data.get("use_histag", False)))
-        self.edit_target_stock.setText(str(data.get("target_stock", "") or ""))
-        _set_combo(self.cmb_target_unit, data.get("target_stock_unit"))
-        self.edit_target_assay.setText(str(data.get("target_assay", "") or ""))
-        self.edit_buffer.setText(str(data.get("buffer", "") or ""))
-        _set_combo(self.cmb_capillary, data.get("capillary"))
-        _set_combo(self.cmb_ligand, data.get("ligand"))
-        self.edit_kd.setText(str(data.get("kd_estimated", "") or ""))
-        _set_combo(self.cmb_kd_unit, data.get("kd_unit"))
-        self.edit_lig_stock.setText(str(data.get("lig_stock", "") or ""))
-        _set_combo(self.cmb_lig_unit, data.get("lig_stock_unit"))
-        self.chk_dmso.setChecked(bool(data.get("lig_in_dmso", False)))
-        self.edit_hi_conc.setText(str(data.get("hi_conc", "") or ""))
-        self.chk_auto.setChecked(bool(data.get("excitation_auto", True)))
-        try:
-            self.spin_excitation.setValue(int(data.get("excitation_pct", self.spin_excitation.value()) or self.spin_excitation.value()))
-        except Exception:
-            pass
-        _set_combo(self.cmb_mst, data.get("mst_power"))
-
-    def set_experiment_type(self, experiment_type_id: str) -> None:
-        mw = self._mw()
-        if hasattr(mw, "current_experiment_type_id"):
-            mw.current_experiment_type_id = str(experiment_type_id or "pre_test")
-
-    def apply_current_experiment_plan(self) -> bool:
-        mw = self._mw()
-        if not hasattr(mw, "save_current_experiment_plan"):
-            self._set_status("?????????????", "danger")
-            return False
-        ok = bool(mw.save_current_experiment_plan())
-        if ok:
-            self._set_status("?  ???? Plan ?????????????", "success")
-        else:
-            self._set_status("???? Plan ????", "danger")
-        return ok
