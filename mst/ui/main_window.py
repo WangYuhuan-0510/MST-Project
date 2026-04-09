@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QMainWindow, QStackedWidget, QMessageBox
 
 from mst.core.app_state import AppState
 from mst.core.data_manager import DataManager
-from mst.core.experiment_schema import list_experiment_types, normalize_experiment_type_id
+from mst.core.experiment_schema import get_experiment_type_config, list_experiment_types, normalize_experiment_type_id
 from mst.core.experiments import Experiment
 from .views.welcome_view import WelcomeView
 from .views.session_wizard import SessionWizard
@@ -85,18 +85,24 @@ class MainWindow(QMainWindow):
         if self.project_view is None or self.current_project_dir is None:
             return
 
-        experiments: list[tuple[str, str, str]] = []
-        for child in sorted(self.current_project_dir.iterdir(), key=lambda p: p.name.lower()):
+        experiments: list[tuple[str, str, str, str, str, int]] = []
+        for order_index, child in enumerate(sorted(self.current_project_dir.iterdir(), key=lambda p: p.name.lower()), start=1):
             if not child.is_dir():
                 continue
             h5_path = child / "experiment.h5"
             if not h5_path.exists():
                 continue
             exp = Experiment.load_h5(h5_path)
-            exp_id = str(exp.id or child.name)
+            exp_id = str(child.name).strip()
             exp_name = str(exp.name or child.name)
-            status = self._experiment_status_by_id.get(exp_id, "draft")
-            experiments.append((exp_id, exp_name, status))
+            status = self._experiment_status_by_id.get(exp.id, self._experiment_status_by_id.get(exp_id, "draft"))
+            exp_type_id = normalize_experiment_type_id(
+                str(exp.metadata.get("experiment_type_id") or exp.metadata.get("experiment_type") or "pre_test")
+            )
+            exp_type_name = str(
+                exp.metadata.get("experiment_type") or get_experiment_type_config(exp_type_id).get("name") or "Pre-test"
+            )
+            experiments.append((exp_id, exp_name, status, exp_type_id, exp_type_name, order_index))
 
         self.project_view.set_experiments(experiments)
         if self.current_experiment_id:
@@ -278,6 +284,7 @@ class MainWindow(QMainWindow):
 
             self._refresh_sidebar_experiments()
             pv.select_experiment(exp.id)
+            pv.update_metadata(exp.metadata)
 
             self.current_excitation = str(exp.metadata.get("excitation", self.current_excitation) or self.current_excitation)
             self.current_experiment_type = str(exp.metadata.get("experiment_type", self.current_experiment_type) or self.current_experiment_type)

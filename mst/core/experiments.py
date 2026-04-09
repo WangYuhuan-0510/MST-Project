@@ -170,6 +170,7 @@ class Experiment:
                 "concentrations": [float(v) for v in concentrations],
                 "feature_y": feature_y,
                 "selected_capillary": int(getattr(getattr(run_view, "vm", None), "selected_capillary", 0) or 0),
+                "highlighted_capillary": int(getattr(getattr(run_view, "vm", None), "selected_capillary", 0) or 0),
                 "t1_s": float(t1),
                 "mst_t_by_ch": t_by_ch,
                 "scan_x_raw": [float(v) for v in scan_x_raw],
@@ -206,6 +207,7 @@ class Experiment:
             "concentrations": [float(v) for v in (getattr(vm, "concentrations", []) or [])],
             "feature_y": [float(v) for v in (getattr(vm, "feature_y", []) or [])],
             "selected_capillary": int(getattr(vm, "selected_capillary", 0) or 0),
+            "highlighted_capillary": int(getattr(vm, "selected_capillary", 0) or 0),
             "t1_s": float(getattr(vm, "t1_s", 2.0) or 2.0),
         }
 
@@ -263,7 +265,8 @@ class Experiment:
             vm.enabled_mask = [True] * vm.n_capillaries
 
         # 还原分析状态
-        vm.selected_capillary = int(self.run_data.get("selected_capillary", 0) or 0)
+        highlighted = int(self.run_data.get("highlighted_capillary", self.run_data.get("selected_capillary", 0)) or 0)
+        vm.selected_capillary = highlighted
         vm.t1_s = float(self.run_data.get("t1_s", 2.0) or 2.0)
         vm.concentrations = [float(v) for v in concentrations]
         vm.feature_y = [float(v) for v in feature_y]
@@ -332,6 +335,7 @@ class Experiment:
             g_run.create_dataset("concentrations", data=np.asarray(self.run_data.get("concentrations", []), dtype=np.float64))
             g_run.create_dataset("feature_y", data=np.asarray(self.run_data.get("feature_y", []), dtype=np.float64))
             g_run.create_dataset("selected_capillary", data=np.asarray([self.run_data.get("selected_capillary", 0)], dtype=np.int32))
+            g_run.create_dataset("highlighted_capillary", data=np.asarray([self.run_data.get("highlighted_capillary", self.run_data.get("selected_capillary", 0))], dtype=np.int32))
             g_run.create_dataset("t1_s", data=np.asarray([self.run_data.get("t1_s", 2.0)], dtype=np.float64))
             g_run.create_dataset("scan_x_raw", data=np.asarray(self.run_data.get("scan_x_raw", []), dtype=np.float64))
             g_run.create_dataset("scan_y_raw", data=np.asarray(self.run_data.get("scan_y_raw", []), dtype=np.float64))

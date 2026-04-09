@@ -12,25 +12,26 @@ project_view.py
 """
 from __future__ import annotations
 
-from pathlib import Path
-
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
     QStackedWidget, QFrame, QScrollArea, QSizePolicy, QSpacerItem,
     QGridLayout,
 )
-from PySide6.QtCore import Qt, Signal, QTimer
+from PySide6.QtCore import Qt, Signal, QTimer, QSize
+from PySide6.QtGui import QPixmap
 
 # ── 共享样式 ────────────────────────────────────────────────────────────────
 from .ui_style import (
     PALETTE, SIDEBAR_W,
     label_style, section_label, divider,
 )
+from mst.core.experiment_schema import get_experiment_type_config, normalize_experiment_type_id
 
 # ── 页面实现 ────────────────────────────────────────────────────────────────
 from .experiment_setup_view import ExperimentSetupView   # Plan
 from .run_view              import RunView               # Results
 from .analysis_view         import AnalysisView          # Details
+from .sidebar_experiment_item import ExperimentItem
 
 
 # ─────────────────────────────────────────────
@@ -69,63 +70,6 @@ class ActionButton(QPushButton):
 # ─────────────────────────────────────────────
 #  Sidebar: experiment list item
 # ─────────────────────────────────────────────
-class ExperimentItem(QPushButton):
-    clicked_experiment = Signal(str)
-
-    def __init__(self, name: str, status: str = "draft", experiment_id: str | None = None, parent=None):
-        super().__init__(parent)
-        self.experiment_id = str(experiment_id or "").strip()
-        self.experiment_name = name
-        self.setCheckable(True)
-        self.setFixedHeight(52)
-        self.setCursor(Qt.PointingHandCursor)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-
-        status_colors = {
-            "draft":   PALETTE["text_muted"],
-            "running": PALETTE["warning"],
-            "done":    PALETTE["success"],
-            "failed":  PALETTE["danger"],
-        }
-        dot_color = status_colors.get(status, PALETTE["text_muted"])
-
-        lo = QHBoxLayout(self)
-        lo.setContentsMargins(12, 0, 12, 0)
-        lo.setSpacing(10)
-
-        dot = QLabel("●")
-        dot.setStyleSheet(f"color: {dot_color}; font-size: 8px;")
-        dot.setFixedWidth(10)
-
-        name_lbl = QLabel(name)
-        name_lbl.setStyleSheet(
-            f"color: {PALETTE['text_primary']}; font-size: 13px; font-weight: 500;"
-        )
-        name_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
-
-        tag = QLabel(status.upper())
-        tag.setStyleSheet(
-            f"color: {dot_color}; font-size: 9px; font-weight: 700; letter-spacing: 0.8px;"
-        )
-        tag.setAttribute(Qt.WA_TransparentForMouseEvents)
-
-        lo.addWidget(dot)
-        lo.addWidget(name_lbl, 1)
-        lo.addWidget(tag)
-
-        self.setStyleSheet(f"""
-            QPushButton {{
-                background: transparent;
-                border: none;
-                border-radius: 8px;
-                text-align: left;
-            }}
-            QPushButton:hover  {{ background: {PALETTE["bg_hover"]}; }}
-            QPushButton:checked {{
-                background: {PALETTE["bg_active"]};
-                border-left: 2px solid {PALETTE["accent"]};
-            }}
-        """)
 
 
 # ─────────────────────────────────────────────
@@ -330,7 +274,7 @@ class Sidebar(QWidget):
         self._exp_container = QWidget()
         self._exp_layout = QVBoxLayout(self._exp_container)
         self._exp_layout.setContentsMargins(0, 0, 0, 0)
-        self._exp_layout.setSpacing(0)
+        self._exp_layout.setSpacing(8)
         root.addWidget(self._exp_container)
 
         root.addStretch()
@@ -343,15 +287,22 @@ class Sidebar(QWidget):
         if selected.experiment_id:
             self.experiment_selected.emit(selected.experiment_id)
 
-    def set_experiments(self, experiments: list[tuple[str, str, str]]) -> None:
+    def set_experiments(self, experiments: list[tuple[str, str, str, str, str, int]]) -> None:
         while self._exp_layout.count():
             item = self._exp_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
         self._exp_buttons = []
-        for experiment_id, name, status in experiments:
-            btn = ExperimentItem(name, status, experiment_id=experiment_id)
+        for experiment_id, name, status, experiment_type_id, experiment_type_name, order_index in experiments:
+            btn = ExperimentItem(
+                name,
+                status,
+                experiment_id=experiment_id,
+                experiment_type_id=experiment_type_id,
+                experiment_type_name=experiment_type_name,
+                order_index=order_index,
+            )
             btn.clicked.connect(lambda _, b=btn: self._select_exp(b))
             self._exp_buttons.append(btn)
             self._exp_layout.addWidget(btn)
