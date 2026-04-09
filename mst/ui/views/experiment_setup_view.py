@@ -486,7 +486,7 @@ class ExperimentSetupView(QScrollArea):
         self.btn_apply = QPushButton("应用")
         self.btn_apply.setFixedHeight(38)
         self.btn_apply.setStyleSheet(primary_btn_style())
-        self.btn_apply.clicked.connect(self.apply_to_state)
+        self.btn_apply.clicked.connect(self.apply_current_experiment_plan)
         self.status_lbl = QLabel("")
         self.status_lbl.setStyleSheet(
             f"color: {PALETTE['success']}; font-size: 12px; font-weight: 500;"
@@ -573,3 +573,51 @@ class ExperimentSetupView(QScrollArea):
             "excitation_pct":    self.spin_excitation.value(),
             "mst_power":         self.cmb_mst.currentText(),   # 低 / 中 / 高
         }
+
+    def set_data(self, data: dict) -> None:
+        if not isinstance(data, dict):
+            return
+
+        def _set_combo(combo: QComboBox, value: object) -> None:
+            text = str(value or "")
+            idx = combo.findText(text)
+            if idx >= 0:
+                combo.setCurrentIndex(idx)
+
+        _set_combo(self.cmb_target, data.get("target"))
+        self.chk_histag.setChecked(bool(data.get("use_histag", False)))
+        self.edit_target_stock.setText(str(data.get("target_stock", "") or ""))
+        _set_combo(self.cmb_target_unit, data.get("target_stock_unit"))
+        self.edit_target_assay.setText(str(data.get("target_assay", "") or ""))
+        self.edit_buffer.setText(str(data.get("buffer", "") or ""))
+        _set_combo(self.cmb_capillary, data.get("capillary"))
+        _set_combo(self.cmb_ligand, data.get("ligand"))
+        self.edit_kd.setText(str(data.get("kd_estimated", "") or ""))
+        _set_combo(self.cmb_kd_unit, data.get("kd_unit"))
+        self.edit_lig_stock.setText(str(data.get("lig_stock", "") or ""))
+        _set_combo(self.cmb_lig_unit, data.get("lig_stock_unit"))
+        self.chk_dmso.setChecked(bool(data.get("lig_in_dmso", False)))
+        self.edit_hi_conc.setText(str(data.get("hi_conc", "") or ""))
+        self.chk_auto.setChecked(bool(data.get("excitation_auto", True)))
+        try:
+            self.spin_excitation.setValue(int(data.get("excitation_pct", self.spin_excitation.value()) or self.spin_excitation.value()))
+        except Exception:
+            pass
+        _set_combo(self.cmb_mst, data.get("mst_power"))
+
+    def set_experiment_type(self, experiment_type_id: str) -> None:
+        mw = self._mw()
+        if hasattr(mw, "current_experiment_type_id"):
+            mw.current_experiment_type_id = str(experiment_type_id or "pre_test")
+
+    def apply_current_experiment_plan(self) -> bool:
+        mw = self._mw()
+        if not hasattr(mw, "save_current_experiment_plan"):
+            self._set_status("?????????????", "danger")
+            return False
+        ok = bool(mw.save_current_experiment_plan())
+        if ok:
+            self._set_status("?  ???? Plan ?????????????", "success")
+        else:
+            self._set_status("???? Plan ????", "danger")
+        return ok

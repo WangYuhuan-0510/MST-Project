@@ -582,11 +582,28 @@ class ProjectView(QWidget):
         self.sidebar.close_btn.clicked.connect(self._on_close)
         self.sidebar.new_btn.clicked.connect(self._on_new_experiment)
 
-    def set_experiments(self, experiments: list[tuple[str, str, str]]) -> None:
+    def set_experiments(self, experiments: list[tuple[str, str, str, str, str, int]]) -> None:
         self.sidebar.set_experiments(experiments)
 
     def select_experiment(self, experiment_id: str) -> None:
         self.sidebar.select_experiment(experiment_id)
+
+    def update_metadata(self, metadata: dict) -> None:
+        if not isinstance(metadata, dict):
+            return
+
+        params = {
+            "target": str(metadata.get("target", "?") or "?"),
+            "target_assay": str(metadata.get("target_assay", "?") or "?"),
+            "ligand": str(metadata.get("ligand", "?") or "?"),
+            "hi_conc": str(metadata.get("hi_conc", "?") or "?"),
+            "buffer": str(metadata.get("buffer", "?") or "?"),
+            "capillary": str(metadata.get("capillary", "?") or "?"),
+            "excitation_auto": str(metadata.get("excitation_auto", "True") or "True").lower() in {"1", "true", "yes", "on"},
+            "excitation_pct": metadata.get("excitation_pct", 20),
+            "mst_power": str(metadata.get("mst_power", "?") or "?"),
+        }
+        self.content.data_panel.update_from_params(params)
 
     def _on_save(self) -> None:
         print("[ProjectView] Save triggered")
