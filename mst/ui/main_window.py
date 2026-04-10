@@ -15,7 +15,7 @@ from PySide6.QtWidgets import QMainWindow, QStackedWidget, QMessageBox
 
 from mst.core.app_state import AppState
 from mst.core.data_manager import DataManager
-from mst.core.experiment_schema import get_experiment_type_config, list_experiment_types, normalize_experiment_type_id
+from mst.core.experiment_schema import default_setup_data, get_experiment_type_config, list_experiment_types, normalize_experiment_type_id
 from mst.core.experiments import Experiment
 from .views.welcome_view import WelcomeView
 from .views.session_wizard import SessionWizard
@@ -276,6 +276,7 @@ class MainWindow(QMainWindow):
         self.current_experiment_type = str(name_by_id.get(self.current_experiment_type_id, "Pre-test"))
 
         self.state.current_session.experiment_type_id = self.current_experiment_type_id
+        self.state.current_session.setup_data = default_setup_data(self.current_experiment_type_id)
 
         pv = self._ensure_project_view()
         setup_view = pv.content.stack.widget(0)

@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import Optional
-from uuid import uuid4
 
 from PySide6.QtCore import QObject, QTimer, Signal
 
@@ -370,25 +369,4 @@ class DataManager(QObject):
         source.error_occurred.connect(self.error_occurred.emit)
         source.debug_stats.connect(self.debug_stats.emit)
         source.finished.connect(self.finished.emit)
-    
-    # 新建实验
-    def new_experiment(self, name: str, path: str, experiment_id: str | None = None):
-        exp = Experiment(id=str(experiment_id).strip() if experiment_id else uuid4().hex, name=name)
-        exp.metadata["experiment_id"] = exp.id
-        self.bind_experiment(exp, base_dir=self.experiment_dir_for_path(path))
-
-    # 打开实验
-    def load_experiment(self, path: str):
-        exp = Experiment.load_h5(path)
-        self.bind_experiment(exp, base_dir=self.experiment_dir_for_path(path))
-
-    # 保存实验
-    def save_current_experiment(self, run_view):
-        if self.current_experiment is None or self.current_h5_path is None:
-            return
-        # 从 UI 抓数据
-        self.current_experiment.capture_from_run_view(run_view)
-        self.current_experiment.metadata["experiment_id"] = self.current_experiment.id
-        # 保存到自己的文件
-        self.current_experiment.save_h5(self.current_h5_path)
     
