@@ -15,7 +15,7 @@ from __future__ import annotations
 from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QVBoxLayout, QLabel, QPushButton,
     QStackedWidget, QFrame, QScrollArea, QSizePolicy, QSpacerItem,
-    QGridLayout,
+    QGridLayout, QInputDialog,
 )
 from PySide6.QtCore import Qt, Signal, QTimer, QSize
 from PySide6.QtGui import QPixmap
@@ -42,27 +42,31 @@ class ActionButton(QPushButton):
         super().__init__(parent)
         color = PALETTE["danger"] if danger else PALETTE["text_secondary"]
         hover = PALETTE["danger"] if danger else PALETTE["text_primary"]
-        self.setText(f"{icon_char}  {label}")
-        self.setFixedHeight(36)
+        border = PALETTE["danger"] if danger else PALETTE["border"]
+        hover_border = PALETTE["danger"] if danger else PALETTE["accent"]
+        self.setText(f"{icon_char}\n{label}")
+        self.setFixedSize(84, 84)
         self.setCursor(Qt.PointingHandCursor)
         self.setStyleSheet(f"""
             QPushButton {{
-                background: transparent;
-                border: none;
-                border-radius: 6px;
+                background: {PALETTE["bg_card"]};
+                border: 1px solid {border};
+                border-radius: 12px;
                 color: {color};
                 font-size: 13px;
-                font-weight: 500;
-                text-align: left;
-                padding: 0 12px;
-                letter-spacing: 0.2px;
+                font-weight: 600;
+                text-align: center;
+                padding: 8px 6px;
+                line-height: 1.4;
             }}
             QPushButton:hover {{
                 background: {PALETTE["bg_hover"]};
                 color: {hover};
+                border-color: {hover_border};
             }}
             QPushButton:pressed {{
                 background: {PALETTE["bg_active"]};
+                border-color: {hover_border};
             }}
         """)
 
@@ -229,6 +233,8 @@ class InstructionsPage(QScrollArea):
 # ─────────────────────────────────────────────
 class Sidebar(QWidget):
     experiment_selected = Signal(str)
+    experiment_rename_requested = Signal(str)
+    experiment_delete_requested = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -253,10 +259,14 @@ class Sidebar(QWidget):
         root.addWidget(sub)
         root.addSpacerItem(QSpacerItem(0, 20))
 
+        actions_row = QHBoxLayout()
+        actions_row.setContentsMargins(6, 0, 6, 0)
+        actions_row.setSpacing(10)
         self.save_btn  = ActionButton("Save",  "💾", danger=False)
         self.close_btn = ActionButton("Close", "✕",  danger=True)
-        root.addWidget(self.save_btn)
-        root.addWidget(self.close_btn)
+        actions_row.addWidget(self.close_btn)
+        actions_row.addWidget(self.save_btn)
+        root.addLayout(actions_row)
 
         root.addSpacerItem(QSpacerItem(0, 16))
         root.addWidget(divider())
@@ -304,6 +314,8 @@ class Sidebar(QWidget):
                 order_index=order_index,
             )
             btn.clicked.connect(lambda _, b=btn: self._select_exp(b))
+            btn.rename_requested.connect(self.experiment_rename_requested.emit)
+            btn.delete_requested.connect(self.experiment_delete_requested.emit)
             self._exp_buttons.append(btn)
             self._exp_layout.addWidget(btn)
 
@@ -587,6 +599,10 @@ class ProjectView(QWidget):
 
     def select_experiment(self, experiment_id: str) -> None:
         self.sidebar.select_experiment(experiment_id)
+
+    def prompt_rename(self, current_name: str) -> tuple[str, bool]:
+        name, ok = QInputDialog.getText(self, "修改实验名称", "实验名称：", text=current_name)
+        return str(name).strip(), bool(ok)
 
     def update_metadata(self, metadata: dict) -> None:
         if not isinstance(metadata, dict):

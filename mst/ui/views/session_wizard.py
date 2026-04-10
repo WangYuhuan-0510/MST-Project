@@ -25,34 +25,31 @@ from .ui_style import PALETTE, SIDEBAR_W, divider, secondary_btn_style
 def _sidebar_action_btn(icon: str, text: str, danger: bool = False) -> QPushButton:
     color = PALETTE["danger"] if danger else PALETTE["text_secondary"]
     hover = PALETTE["danger"] if danger else PALETTE["text_primary"]
-    btn = QPushButton()
-    btn.setFixedSize(56, 56)
+    border = PALETTE["danger"] if danger else PALETTE["border"]
+    hover_border = PALETTE["danger"] if danger else PALETTE["accent"]
+    btn = QPushButton(f"{icon}\n{text}")
+    btn.setFixedSize(84, 84)
     btn.setCursor(Qt.PointingHandCursor)
-
-    lo = QVBoxLayout(btn)
-    lo.setContentsMargins(0, 6, 0, 4)
-    lo.setSpacing(2)
-
-    icon_lbl = QLabel(icon)
-    icon_lbl.setAlignment(Qt.AlignCenter)
-    icon_lbl.setStyleSheet(f"color: {color}; font-size: 20px; background: transparent; border: none;")
-    icon_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
-
-    text_lbl = QLabel(text)
-    text_lbl.setAlignment(Qt.AlignCenter)
-    text_lbl.setStyleSheet(
-        f"color: {color}; font-size: 10px; font-weight: 600; background: transparent; border: none;"
-    )
-    text_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
-
-    lo.addWidget(icon_lbl)
-    lo.addWidget(text_lbl)
-
     btn.setStyleSheet(f"""
-        QPushButton {{ background: transparent; border: none; border-radius: 8px; }}
-        QPushButton:hover {{ background: {PALETTE['bg_hover']}; }}
-        QPushButton:hover QLabel {{ color: {hover}; }}
-        QPushButton:pressed {{ background: {PALETTE['bg_active']}; }}
+        QPushButton {{
+            background: {PALETTE['bg_card']};
+            border: 1px solid {border};
+            border-radius: 12px;
+            color: {color};
+            font-size: 13px;
+            font-weight: 600;
+            text-align: center;
+            padding: 8px 6px;
+        }}
+        QPushButton:hover {{
+            background: {PALETTE['bg_hover']};
+            color: {hover};
+            border-color: {hover_border};
+        }}
+        QPushButton:pressed {{
+            background: {PALETTE['bg_active']};
+            border-color: {hover_border};
+        }}
     """)
     return btn
 
@@ -98,6 +95,8 @@ class _WizardSidebar(QWidget):
         lo.addSpacing(16)
 
         btn_row = QHBoxLayout()
+        btn_row.setContentsMargins(6, 0, 6, 0)
+        btn_row.setSpacing(10)
         self.btn_close = _sidebar_action_btn("✕", "Close", danger=True)
         self.btn_save = _sidebar_action_btn("💾", "Save", danger=False)
         self.btn_close.clicked.connect(self.close_clicked)

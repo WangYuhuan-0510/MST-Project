@@ -121,6 +121,8 @@ class Experiment:
         exp.protocol["led_power"] = int(exp.setup_data.get("excitation_pct", 20) or 20)
         exp.protocol["mst_power"] = str(exp.setup_data.get("mst_power", "中") or "中")
         exp.protocol["time_scheme"] = str(exp.setup_data.get("time_scheme", "[]") or "[]")
+        exp.metadata["display_name"] = str(name or "experiment")
+        exp.name = str(name or "experiment")
 
         return exp
 
@@ -384,6 +386,7 @@ class Experiment:
                 )
                 exp.id = str(exp.metadata.get("experiment_id") or exp.id)
                 exp.metadata["experiment_id"] = exp.id
+                exp.name = str(exp.metadata.get("display_name") or exp.name)
             # 加载协议并转换特定字段类型
             if "protocol" in f:
                 protocol: Dict[str, Any] = {}

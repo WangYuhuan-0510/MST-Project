@@ -4,7 +4,9 @@ from pathlib import Path
 
 from PySide6.QtCore import Qt, Signal, QSize
 from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QLabel, QPushButton, QFrame, QHBoxLayout, QVBoxLayout, QSizePolicy
+from PySide6.QtWidgets import (
+    QLabel, QPushButton, QFrame, QHBoxLayout, QVBoxLayout, QSizePolicy,
+)
 
 from mst.core.experiment_schema import get_experiment_type_config, normalize_experiment_type_id
 from .ui_style import PALETTE
@@ -12,6 +14,8 @@ from .ui_style import PALETTE
 
 class ExperimentItem(QPushButton):
     clicked_experiment = Signal(str)
+    rename_requested = Signal(str)
+    delete_requested = Signal(str)
 
     def __init__(
         self,
@@ -92,11 +96,42 @@ class ExperimentItem(QPushButton):
         top_row.addWidget(order_badge, 0, Qt.AlignVCenter)
         top_row.addWidget(icon_holder, 0, Qt.AlignVCenter)
         top_row.addWidget(type_lbl, 1, Qt.AlignVCenter)
-        top_row.addWidget(status_dot, 0, Qt.AlignVCenter)
+
+        top_right = QHBoxLayout()
+        top_right.setContentsMargins(0, 0, 0, 0)
+        top_right.setSpacing(6)
+        top_right.addWidget(status_dot, 0, Qt.AlignVCenter)
+
+        self.delete_btn = QPushButton("×")
+        self.delete_btn.setFixedSize(20, 20)
+        self.delete_btn.setCursor(Qt.PointingHandCursor)
+        self.delete_btn.setToolTip("删除实验")
+        self.delete_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: none;
+                border-radius: 10px;
+                color: {PALETTE['text_muted']};
+                font-size: 12px;
+                font-weight: 700;
+                text-align: center;
+                padding: 0;
+            }}
+            QPushButton:hover {{
+                background: #FFF0F1;
+                color: {PALETTE['danger']};
+                border: 1px solid {PALETTE['danger']};
+            }}
+            QPushButton:pressed {{
+                background: #FFE0E3;
+            }}
+        """)
+        self.delete_btn.clicked.connect(self._emit_delete_requested)
+        top_right.addWidget(self.delete_btn, 0, Qt.AlignVCenter)
+        top_row.addLayout(top_right, 0)
 
         bottom_frame = QFrame()
         bottom_frame.setObjectName("bottomFrame")
-        bottom_frame.setAttribute(Qt.WA_TransparentForMouseEvents)
         bottom_frame.setStyleSheet(f"""
             QFrame#bottomFrame {{
                 background: rgba(255, 255, 255, 0.82);
@@ -105,15 +140,42 @@ class ExperimentItem(QPushButton):
             }}
         """)
         bottom_row = QHBoxLayout(bottom_frame)
-        bottom_row.setContentsMargins(12, 8, 12, 8)
-        bottom_row.setSpacing(8)
+        bottom_row.setContentsMargins(12, 8, 8, 8)
+        bottom_row.setSpacing(6)
 
-        name_lbl = QLabel(self.experiment_name)
-        name_lbl.setStyleSheet(
+        self.name_lbl = QLabel(self.experiment_name)
+        self.name_lbl.setStyleSheet(
             f"color: {PALETTE['text_primary']}; font-size: 13px; font-weight: 600;"
         )
-        name_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
-        bottom_row.addWidget(name_lbl, 1)
+        self.name_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+        bottom_row.addWidget(self.name_lbl, 1)
+
+        self.rename_btn = QPushButton("✎")
+        self.rename_btn.setFixedSize(22, 22)
+        self.rename_btn.setCursor(Qt.PointingHandCursor)
+        self.rename_btn.setToolTip("修改实验名称")
+        self.rename_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: transparent;
+                border: none;
+                border-radius: 11px;
+                color: {PALETTE['text_muted']};
+                font-size: 12px;
+                font-weight: 700;
+                text-align: center;
+                padding: 0;
+            }}
+            QPushButton:hover {{
+                background: {PALETTE['bg_hover']};
+                color: {PALETTE['accent']};
+                border: 1px solid {PALETTE['border']};
+            }}
+            QPushButton:pressed {{
+                background: {PALETTE['bg_active']};
+            }}
+        """)
+        self.rename_btn.clicked.connect(self._emit_rename_requested)
+        bottom_row.addWidget(self.rename_btn, 0, Qt.AlignRight | Qt.AlignVCenter)
 
         root.addLayout(top_row)
         root.addWidget(bottom_frame)
@@ -150,3 +212,11 @@ class ExperimentItem(QPushButton):
                 border: 1px solid {PALETTE['accent']};
             }}
         """)
+
+    def _emit_rename_requested(self) -> None:
+        if self.experiment_id:
+            self.rename_requested.emit(self.experiment_id)
+
+    def _emit_delete_requested(self) -> None:
+        if self.experiment_id:
+            self.delete_requested.emit(self.experiment_id)
