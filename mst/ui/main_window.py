@@ -37,7 +37,7 @@ class MainWindow(QMainWindow):
         self.current_experiment_type: str = "Pre-test"
         self.current_experiment_type_id: str = "pre_test"
         self._experiment_status_by_id: dict[str, str] = {}
-        self._plan_snapshot_by_experiment_id: dict[str, dict] = {}
+        self._plan_snapshot_by_experiment_key: dict[str, dict] = {}
 
         # ── 堆叠页面 ──────────────────────────────────────────────────────
         self._stack = QStackedWidget(self)
@@ -82,12 +82,18 @@ class MainWindow(QMainWindow):
             return None
         return exp_dir / "experiment.h5"
 
+    def _experiment_key(self, experiment_id: str | None = None, path: str | Path | None = None) -> str:
+        if path:
+            return str(Path(path).parent.name).strip()
+        return str(experiment_id or "").strip()
+
     def _capture_current_plan_snapshot(self) -> None:
         if self.project_view is None or not self.current_experiment_id:
             return
         setup_view = self.project_view.content.stack.widget(0)
         if hasattr(setup_view, "get_params"):
-            self._plan_snapshot_by_experiment_id[self.current_experiment_id] = dict(setup_view.get_params() or {})
+            key = self._experiment_key(experiment_id=self.current_experiment_id, path=self.current_experiment_path)
+            self._plan_snapshot_by_experiment_key[key] = dict(setup_view.get_params() or {})
 
 
     def _refresh_sidebar_experiments(self) -> None:
@@ -217,7 +223,8 @@ class MainWindow(QMainWindow):
             self.current_experiment_path = dm.current_h5_path
             setup_params = setup_view.get_params() if hasattr(setup_view, "get_params") else {}
             if self.current_experiment_id:
-                self._plan_snapshot_by_experiment_id[self.current_experiment_id] = dict(setup_params or {})
+                key = self._experiment_key(experiment_id=self.current_experiment_id, path=self.current_experiment_path)
+                self._plan_snapshot_by_experiment_key[key] = dict(setup_params or {})
 
             exp = Experiment.from_ui(
                 name=Path(self.current_experiment_path).parent.name,
@@ -254,7 +261,7 @@ class MainWindow(QMainWindow):
             self._refresh_sidebar_experiments()
             self.project_view.select_experiment(self.current_experiment_id)
             self.state.current_session.setup_data = {}
-            self._plan_snapshot_by_experiment_id[self.current_experiment_id] = {}
+            self._plan_snapshot_by_experiment_key[self._experiment_key(experiment_id=self.current_experiment_id, path=self.current_experiment_path)] = {}
             if hasattr(setup_view, "set_experiment_type"):
                 setup_view.set_experiment_type(self.current_experiment_type_id)
 
@@ -275,7 +282,7 @@ class MainWindow(QMainWindow):
 
             self.state.current_session.experiment_type_id = loaded_type_id
             self.state.current_session.setup_data = dict(exp.setup_data or {})
-            self.current_experiment_id = exp.id
+            self.current_experiment_id = str(Path(path).parent.name)
 
             if hasattr(run_view, "clear_view_state"):
                 run_view.clear_view_state()
@@ -288,7 +295,7 @@ class MainWindow(QMainWindow):
 
             if hasattr(setup_view, "set_experiment_type"):
                 setup_view.set_experiment_type(loaded_type_id)
-            snapshot = self._plan_snapshot_by_experiment_id.get(exp.id)
+            snapshot = self._plan_snapshot_by_experiment_key.get(self._experiment_key(path=path, experiment_id=self.current_experiment_id))
             if snapshot and hasattr(setup_view, "set_data"):
                 setup_view.set_data(snapshot)
             else:
@@ -300,7 +307,7 @@ class MainWindow(QMainWindow):
                 exp.apply_to_run_view(run_view)
 
             self._refresh_sidebar_experiments()
-            pv.select_experiment(exp.id)
+            pv.select_experiment(self.current_experiment_id)
             pv.update_metadata({**dict(exp.metadata or {}), **dict(exp.setup_data or {}), **dict(exp.protocol or {})})
 
             self.current_excitation = str(exp.metadata.get("excitation", self.current_excitation) or self.current_excitation)
