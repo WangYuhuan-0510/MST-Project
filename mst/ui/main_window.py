@@ -36,6 +36,7 @@ class MainWindow(QMainWindow):
         self.current_excitation: str = "RED"
         self.current_experiment_type: str = "Pre-test"
         self.current_experiment_type_id: str = "pre_test"
+        self._creating_new_experiment: bool = False
         self._experiment_status_by_id: dict[str, str] = {}
         self._plan_snapshot_by_experiment_key: dict[str, dict] = {}
         self._experiment_display_name_by_id: dict[str, str] = {}
@@ -52,7 +53,7 @@ class MainWindow(QMainWindow):
         # index 1 — 向导
         self.wizard = SessionWizard()
         self.wizard.wizard_completed.connect(self._on_wizard_completed)
-        self.wizard.close_requested.connect(self._go_welcome)
+        self.wizard.close_requested.connect(self._on_wizard_close_requested)
         self._stack.addWidget(self.wizard)
 
         # index 2 — 主界面（首次选完实验类型后懒加载）
@@ -90,6 +91,19 @@ class MainWindow(QMainWindow):
         if path:
             return str(Path(path).parent.name).strip()
         return str(experiment_id or "").strip()
+
+    def _next_type_sequence(self, experiment_type_name: str) -> int:
+        base = str(experiment_type_name or "Pre-test").strip() or "Pre-test"
+        max_index = 0
+        prefix = f"{base} ".lower()
+        for name in self._experiment_display_name_by_id.values():
+            text = str(name or "").strip()
+            if not text.lower().startswith(prefix):
+                continue
+            suffix = text[len(base):].strip()
+            if suffix.isdigit():
+                max_index = max(max_index, int(suffix))
+        return max_index + 1
 
     def _capture_current_plan_snapshot(self) -> None:
         if self.project_view is None or not self.current_experiment_id:
@@ -148,6 +162,7 @@ class MainWindow(QMainWindow):
             return
 
         experiments: list[tuple[str, str, str, str, str, int]] = []
+        type_counts: dict[str, int] = {}
         for order_index, child in enumerate(sorted(self.current_project_dir.iterdir(), key=lambda p: p.name.lower()), start=1):
             if not child.is_dir():
                 continue
@@ -156,15 +171,17 @@ class MainWindow(QMainWindow):
                 continue
             exp = Experiment.load_h5(h5_path)
             exp_id = str(child.name).strip()
-            exp_name = str(self._experiment_display_name_by_id.get(exp_id) or exp.metadata.get("display_name") or exp.name or child.name)
-            self._experiment_display_name_by_id[exp_id] = exp_name
-            status = self._experiment_status_by_id.get(exp.id, self._experiment_status_by_id.get(exp_id, "draft"))
             exp_type_id = normalize_experiment_type_id(
                 str(exp.metadata.get("experiment_type_id") or exp.metadata.get("experiment_type") or "pre_test")
             )
-            exp_type_name = str(
+            base_type_name = str(
                 exp.metadata.get("experiment_type") or get_experiment_type_config(exp_type_id).get("name") or "Pre-test"
             )
+            type_counts[exp_type_id] = type_counts.get(exp_type_id, 0) + 1
+            exp_type_name = f"{base_type_name} {type_counts[exp_type_id]}"
+            exp_name = str(self._experiment_display_name_by_id.get(exp_id) or exp.metadata.get("display_name") or f"Experiment {order_index}")
+            self._experiment_display_name_by_id[exp_id] = exp_name
+            status = self._experiment_status_by_id.get(exp.id, self._experiment_status_by_id.get(exp_id, "draft"))
             experiments.append((exp_id, exp_name, status, exp_type_id, exp_type_name, order_index))
 
         self.project_view.set_experiments(experiments)
@@ -275,6 +292,27 @@ class MainWindow(QMainWindow):
         name_by_id = {t.get("id"): t.get("name", "") for t in type_items}
         self.current_experiment_type = str(name_by_id.get(self.current_experiment_type_id, "Pre-test"))
 
+        if self._creating_new_experiment and self.current_project_dir is not None:
+            self.current_experiment_id = Experiment().id
+            exp_dir = self.current_project_dir / self.current_experiment_id
+            self.current_experiment_path = str(exp_dir / "experiment.h5")
+            display_name = f"Experiment {len(self._experiment_display_name_by_id) + 1}"
+            setup_params = {}
+            self._experiment_status_by_id[self.current_experiment_id] = "draft"
+            self._experiment_display_name_by_id[self.current_experiment_id] = display_name
+            self.state.current_session.setup_data = dict(setup_params)
+            self._plan_snapshot_by_experiment_key[self._experiment_key(experiment_id=self.current_experiment_id, path=self.current_experiment_path)] = dict(setup_params)
+
+            exp = Experiment.from_ui(
+                name=display_name,
+                setup_params=setup_params,
+                excitation=self.current_excitation,
+                experiment_type=self.current_experiment_type,
+                experiment_type_id=self.current_experiment_type_id,
+                experiment_id=self.current_experiment_id,
+            )
+            exp.save_h5(self.current_experiment_path)
+
         self.state.current_session.experiment_type_id = self.current_experiment_type_id
 
         pv = self._ensure_project_view()
@@ -298,15 +336,30 @@ class MainWindow(QMainWindow):
         path = self.current_experiment_path
         if path and Path(path).exists():
             self._load_experiment_into_ui(path, pv)
+        elif self.current_experiment_id:
+            pv.select_experiment(self.current_experiment_id)
+
+        self._creating_new_experiment = False
 
     def _go_welcome(self) -> None:
         """返回欢迎页。"""
         self.current_project_dir = None
         self.current_experiment_id = None
         self.current_experiment_path = None
+        self._creating_new_experiment = False
         self.setWindowTitle("PW-MST 实验控制平台")
         self._stack.setCurrentIndex(0)
         self.welcome_view._populate_recent()
+
+    def _on_wizard_close_requested(self) -> None:
+        if self._creating_new_experiment:
+            self._creating_new_experiment = False
+            if self.project_view is not None:
+                self._stack.setCurrentIndex(2)
+            else:
+                self._go_welcome()
+            return
+        self._go_welcome()
 
     def _on_save(self) -> None:
         if self.project_view is None:
@@ -355,26 +408,10 @@ class MainWindow(QMainWindow):
 
     def _on_new_exp(self) -> None:
         if self.project_view and self.current_project_dir is not None:
-            self.current_experiment_id = Experiment().id
-            exp_dir = self.current_project_dir / self.current_experiment_id
-            self.current_experiment_path = str(exp_dir / "experiment.h5")
-            self.project_view.content.stack.setCurrentIndex(0)
-            setup_view = self.project_view.content.stack.widget(0)
-            run_view = self.project_view.content.stack.widget(2)
-            if hasattr(run_view, "data_manager"):
-                run_view.data_manager.bind_experiment_by_id(
-                    self.current_experiment_id,
-                    project_dir=self.current_project_dir,
-                    name=exp_dir.name,
-                )
-            self._experiment_status_by_id[self.current_experiment_id] = "draft"
-            self._experiment_display_name_by_id[self.current_experiment_id] = "experiment"
-            self.state.current_session.setup_data = dict(setup_view.get_params() or {}) if hasattr(setup_view, "get_params") else {}
-            self._refresh_sidebar_experiments()
-            self.project_view.select_experiment(self.current_experiment_id)
-            self._plan_snapshot_by_experiment_key[self._experiment_key(experiment_id=self.current_experiment_id, path=self.current_experiment_path)] = dict(self.state.current_session.setup_data)
-            if hasattr(setup_view, "set_experiment_type"):
-                setup_view.set_experiment_type(self.current_experiment_type_id)
+            self._capture_current_plan_snapshot()
+            self._creating_new_experiment = True
+            self.wizard.reset()
+            self._stack.setCurrentIndex(1)
 
     def _load_experiment_into_ui(self, path: str, pv: ProjectView) -> None:
         try:
