@@ -25,7 +25,7 @@ def _base_sections() -> List[SectionConfig]:
             "id": "ligand",
             "title": "配体设置",
             "fields": [
-                {"key": "ligand", "label": "配体", "type": "select", "options": ["mCNGC30", "EGFR", "HER2", "自定义"], "default": "mCNGC30"},
+                {"key": "ligand", "label": "配体", "type": "select", "options": ["mCNGC30", "EGFR", "HER2"], "default": "mCNGC30"},
                 {"key": "kd_estimated", "label": "预估 Kd", "type": "text", "default": ""},
                 {"key": "kd_unit", "label": "Kd 单位", "type": "select", "options": ["M", "mM", "µM", "nM", "pM"], "default": "nM"},
                 {"key": "lig_stock", "label": "配体母液浓度", "type": "text", "default": "16"},
@@ -38,7 +38,7 @@ def _base_sections() -> List[SectionConfig]:
             "id": "environment",
             "title": "环境与耗材",
             "fields": [
-                {"key": "buffer", "label": "缓冲液", "type": "text", "default": "PBS including 0.05% Tween"},
+                {"key": "buffer", "label": "缓冲液", "type": "select", "options": ["MST Buffer including 0.05% Tween", "PBS including 0.05% Tween", "PBS Buffer including 0.05% Tween"], "default": "PBS including 0.05% Tween"},
                 {
                     "key": "capillary",
                     "label": "毛细管",
@@ -59,7 +59,7 @@ def _base_sections() -> List[SectionConfig]:
             "title": "系统设置",
             "fields": [
                 {"key": "excitation_auto", "label": "激发光自动检测", "type": "bool", "default": True},
-                {"key": "excitation_pct", "label": "激发光功率(%)", "type": "int", "min": 10, "max": 100, "step": 5, "default": 20},
+                {"key": "excitation_pct", "label": "激发光功率(%)", "type": "int", "min": 1, "max": 100, "step": 5, "default": 10},
                 {"key": "mst_power", "label": "MST 功率", "type": "select", "options": ["低", "中", "高"], "default": "中"},
                 {"key": "time_scheme", "label": "时间方案", "type": "text", "default": "[]"},
             ],

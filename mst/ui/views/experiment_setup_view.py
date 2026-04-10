@@ -251,6 +251,22 @@ def _unit_combo(items: list[str]) -> QComboBox:
 LABEL_W = 260   # 左侧字段标签固定宽度，用于两栏对齐
 
 
+class ExcitationSpinBox(QSpinBox):
+    def stepBy(self, steps: int) -> None:
+        current = self.value()
+        if steps > 0:
+            if current < 5:
+                self.setValue(5)
+            else:
+                super().stepBy(steps)
+            return
+        if steps < 0:
+            if current <= 5:
+                self.setValue(1)
+            else:
+                super().stepBy(steps)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 #  Main view
 # ─────────────────────────────────────────────────────────────────────────────
@@ -314,6 +330,8 @@ class ExperimentSetupView(QScrollArea):
 
         r0 = QHBoxLayout(); r0.setSpacing(6)
         self.cmb_target = QComboBox()
+        self.cmb_target.setEditable(True)
+        self.cmb_target.setInsertPolicy(QComboBox.NoInsert)
         self.cmb_target.addItems(["NTA", "His-Tag", "Biotin", "Amine", "Thiol"])
         self.cmb_target.setStyleSheet(_combo_style())
         r0.addWidget(self.cmb_target, 1)
@@ -361,10 +379,14 @@ class ExperimentSetupView(QScrollArea):
         bc.addWidget(divider())
 
         rb = QHBoxLayout(); rb.setSpacing(6)
-        self.edit_buffer = QLineEdit("PBS including 0.05% Tween")
-        self.edit_buffer.setStyleSheet(_input_style())
-        rb.addWidget(self.edit_buffer, 1)
-        rb.addWidget(_edit_btn())
+        self.cmb_buffer = QComboBox()
+        self.cmb_buffer.addItems([
+            "MST Buffer including 0.05% Tween",
+            "PBS including 0.05% Tween",
+            "PBS Buffer including 0.05% Tween",
+        ])
+        self.cmb_buffer.setStyleSheet(_combo_style())
+        rb.addWidget(self.cmb_buffer, 1)
         rb.addWidget(_help_btn())
         bc.addLayout(rb)
 
@@ -408,7 +430,9 @@ class ExperimentSetupView(QScrollArea):
 
         rl0 = QHBoxLayout(); rl0.setSpacing(6)
         self.cmb_ligand = QComboBox()
-        self.cmb_ligand.addItems(["mCNGC30", "EGFR", "HER2", "自定义"])
+        self.cmb_ligand.setEditable(True)
+        self.cmb_ligand.setInsertPolicy(QComboBox.NoInsert)
+        self.cmb_ligand.addItems(["mCNGC30", "EGFR", "HER2"])
         self.cmb_ligand.setStyleSheet(_combo_style())
         rl0.addWidget(self.cmb_ligand, 1)
         rl0.addWidget(_help_btn())
@@ -499,12 +523,12 @@ class ExperimentSetupView(QScrollArea):
         self.chk_auto = QCheckBox("自动检测")
         self.chk_auto.setStyleSheet(_check_style())
         self.chk_auto.setChecked(True)
-        self.spin_excitation = QSpinBox()
-        self.spin_excitation.setRange(10, 100)
+        self.spin_excitation = ExcitationSpinBox()
+        self.spin_excitation.setRange(1, 100)
         self.spin_excitation.setSingleStep(5)
-        self.spin_excitation.setValue(20)
+        self.spin_excitation.setValue(10)
         self.spin_excitation.setSuffix(" %")
-        self.spin_excitation.setFixedWidth(84)
+        self.spin_excitation.setFixedWidth(112)
         self.spin_excitation.setStyleSheet(_spinbox_style())
         self.spin_excitation.setEnabled(True)
         ex_ctrl.addWidget(self.chk_auto)
@@ -585,6 +609,8 @@ class ExperimentSetupView(QScrollArea):
         idx = combo.findText(text)
         if idx >= 0:
             combo.setCurrentIndex(idx)
+        elif combo.isEditable():
+            combo.setEditText(text)
 
     def set_data(self, data: dict) -> None:
         """按实验快照/存档回填设置页，保证每个实验互相独立。"""
@@ -595,7 +621,7 @@ class ExperimentSetupView(QScrollArea):
         self.edit_target_stock.setText(str(payload.get("target_stock", "") or ""))
         self._set_combo_text(self.cmb_target_unit, payload.get("target_stock_unit", ""))
         self.edit_target_assay.setText(str(payload.get("target_assay", "") or ""))
-        self.edit_buffer.setText(str(payload.get("buffer", "") or ""))
+        self._set_combo_text(self.cmb_buffer, payload.get("buffer", ""))
         self._set_combo_text(self.cmb_capillary, payload.get("capillary", ""))
         self._set_combo_text(self.cmb_ligand, payload.get("ligand", ""))
         self.edit_kd.setText(str(payload.get("kd_estimated", "") or ""))
@@ -605,7 +631,7 @@ class ExperimentSetupView(QScrollArea):
         self.chk_dmso.setChecked(bool(payload.get("lig_in_dmso", False)))
         self.edit_hi_conc.setText(str(payload.get("hi_conc", "") or ""))
         self.chk_auto.setChecked(bool(payload.get("excitation_auto", True)))
-        self.spin_excitation.setValue(int(payload.get("excitation_pct", 20) or 20))
+        self.spin_excitation.setValue(int(payload.get("excitation_pct", 10) or 10))
         self._set_combo_text(self.cmb_mst, payload.get("mst_power", ""))
 
     def _load_from_state(self) -> None:
@@ -652,7 +678,7 @@ class ExperimentSetupView(QScrollArea):
             "target_stock":      self.edit_target_stock.text(),
             "target_stock_unit": self.cmb_target_unit.currentText(),
             "target_assay":      self.edit_target_assay.text(),
-            "buffer":            self.edit_buffer.text(),
+            "buffer":            self.cmb_buffer.currentText(),
             "capillary":         self.cmb_capillary.currentText(),
             "ligand":            self.cmb_ligand.currentText(),
             "kd_estimated":      self.edit_kd.text(),

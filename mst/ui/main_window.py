@@ -72,6 +72,7 @@ class MainWindow(QMainWindow):
             self.project_view.sidebar.experiment_selected.connect(self._on_experiment_selected)
             self.project_view.sidebar.experiment_rename_requested.connect(self._on_experiment_rename_requested)
             self.project_view.sidebar.experiment_delete_requested.connect(self._on_experiment_delete_requested)
+            self._bind_plan_autosave()
         return self.project_view
 
     def _experiment_dir(self, experiment_id: str) -> Path | None:
@@ -96,7 +97,50 @@ class MainWindow(QMainWindow):
         setup_view = self.project_view.content.stack.widget(0)
         if hasattr(setup_view, "get_params"):
             key = self._experiment_key(experiment_id=self.current_experiment_id, path=self.current_experiment_path)
-            self._plan_snapshot_by_experiment_key[key] = dict(setup_view.get_params() or {})
+            snapshot = dict(setup_view.get_params() or {})
+            self._plan_snapshot_by_experiment_key[key] = snapshot
+            self.state.current_session.setup_data = dict(snapshot)
+
+    def _bind_plan_autosave(self) -> None:
+        if self.project_view is None:
+            return
+        setup_view = self.project_view.content.stack.widget(0)
+
+        def remember(*_args) -> None:
+            self._capture_current_plan_snapshot()
+
+        watched_widgets = [
+            "cmb_target",
+            "chk_histag",
+            "edit_target_stock",
+            "cmb_target_unit",
+            "edit_target_assay",
+            "cmb_buffer",
+            "cmb_capillary",
+            "cmb_ligand",
+            "edit_kd",
+            "cmb_kd_unit",
+            "edit_lig_stock",
+            "cmb_lig_unit",
+            "chk_dmso",
+            "edit_hi_conc",
+            "chk_auto",
+            "spin_excitation",
+            "cmb_mst",
+        ]
+
+        for name in watched_widgets:
+            widget = getattr(setup_view, name, None)
+            if widget is None:
+                continue
+            if hasattr(widget, "currentTextChanged"):
+                widget.currentTextChanged.connect(remember)
+            if hasattr(widget, "textChanged"):
+                widget.textChanged.connect(remember)
+            if hasattr(widget, "toggled"):
+                widget.toggled.connect(remember)
+            if hasattr(widget, "valueChanged"):
+                widget.valueChanged.connect(remember)
 
 
     def _refresh_sidebar_experiments(self) -> None:
@@ -325,10 +369,10 @@ class MainWindow(QMainWindow):
                 )
             self._experiment_status_by_id[self.current_experiment_id] = "draft"
             self._experiment_display_name_by_id[self.current_experiment_id] = "experiment"
+            self.state.current_session.setup_data = dict(setup_view.get_params() or {}) if hasattr(setup_view, "get_params") else {}
             self._refresh_sidebar_experiments()
             self.project_view.select_experiment(self.current_experiment_id)
-            self.state.current_session.setup_data = {}
-            self._plan_snapshot_by_experiment_key[self._experiment_key(experiment_id=self.current_experiment_id, path=self.current_experiment_path)] = {}
+            self._plan_snapshot_by_experiment_key[self._experiment_key(experiment_id=self.current_experiment_id, path=self.current_experiment_path)] = dict(self.state.current_session.setup_data)
             if hasattr(setup_view, "set_experiment_type"):
                 setup_view.set_experiment_type(self.current_experiment_type_id)
 

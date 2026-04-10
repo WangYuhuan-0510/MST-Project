@@ -228,7 +228,7 @@ class Experiment:
         mst = str(self.protocol.get("mst_power", setup_data.get("mst_power", "中")) or "中")
 
         if hasattr(setup_view, "spin_excitation"):
-            setup_view.spin_excitation.setValue(max(10, min(100, led)))
+            setup_view.spin_excitation.setValue(max(1, min(100, led)))
         if hasattr(setup_view, "cmb_mst"):
             idx = setup_view.cmb_mst.findText(mst)
             if idx >= 0:
