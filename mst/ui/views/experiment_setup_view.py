@@ -27,6 +27,7 @@ from .ui_style import (
 ICON_DIR = Path(__file__).resolve().parent / "icons"
 COMBO_ARROW_ICON = str((ICON_DIR / "combo_down_black.svg").resolve()).replace("\\", "/")
 SPIN_UP_ARROW_ICON = str((ICON_DIR / "combo_up_black.svg").resolve()).replace("\\", "/")
+UNIT_OPTIONS = ["M", "mM", "µM", "nM", "pM"]
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -242,7 +243,7 @@ def _value_lbl(text: str) -> QLabel:
 def _unit_combo(items: list[str]) -> QComboBox:
     c = QComboBox()
     c.addItems(items)
-    c.setFixedWidth(72)
+    c.setMinimumWidth(88)
     c.setStyleSheet(_combo_style())
     return c
 
@@ -332,7 +333,7 @@ class ExperimentSetupView(QScrollArea):
         self.edit_target_stock = QLineEdit("5")
         self.edit_target_stock.setFixedWidth(80)
         self.edit_target_stock.setStyleSheet(_input_style())
-        self.cmb_target_unit = _unit_combo(["µM", "nM", "mM"])
+        self.cmb_target_unit = _unit_combo(UNIT_OPTIONS)
         r2.addWidget(self.edit_target_stock)
         r2.addWidget(self.cmb_target_unit)
         r2.addWidget(_help_btn())
@@ -419,7 +420,7 @@ class ExperimentSetupView(QScrollArea):
         self.edit_kd.setPlaceholderText("可选")
         self.edit_kd.setFixedWidth(80)
         self.edit_kd.setStyleSheet(_input_style())
-        self.cmb_kd_unit = _unit_combo(["µM", "nM", "mM"])
+        self.cmb_kd_unit = _unit_combo(UNIT_OPTIONS)
         rl1.addWidget(self.edit_kd)
         rl1.addWidget(self.cmb_kd_unit)
         rl1.addWidget(_help_btn())
@@ -431,7 +432,7 @@ class ExperimentSetupView(QScrollArea):
         self.edit_lig_stock = QLineEdit("16")
         self.edit_lig_stock.setFixedWidth(80)
         self.edit_lig_stock.setStyleSheet(_input_style())
-        self.cmb_lig_unit = _unit_combo(["µM", "nM", "mM"])
+        self.cmb_lig_unit = _unit_combo(UNIT_OPTIONS)
         rl2.addWidget(self.edit_lig_stock)
         rl2.addWidget(self.cmb_lig_unit)
         rl2.addWidget(_help_btn())
@@ -547,7 +548,7 @@ class ExperimentSetupView(QScrollArea):
         self.btn_apply = QPushButton("应用")
         self.btn_apply.setFixedHeight(38)
         self.btn_apply.setStyleSheet(primary_btn_style())
-        self.btn_apply.clicked.connect(self.apply_current_experiment_plan)
+        self.btn_apply.clicked.connect(self.apply_to_state)
         self.status_lbl = QLabel("")
         self.status_lbl.setStyleSheet(
             f"color: {PALETTE['success']}; font-size: 12px; font-weight: 500;"
@@ -576,6 +577,36 @@ class ExperimentSetupView(QScrollArea):
         self.status_lbl.setStyleSheet(
             f"color: {PALETTE[color_key]}; font-size: 12px; font-weight: 500;"
         )
+
+    def _set_combo_text(self, combo: QComboBox, value: str) -> None:
+        text = str(value or "").strip()
+        if not text:
+            return
+        idx = combo.findText(text)
+        if idx >= 0:
+            combo.setCurrentIndex(idx)
+
+    def set_data(self, data: dict) -> None:
+        """按实验快照/存档回填设置页，保证每个实验互相独立。"""
+        payload = dict(data or {})
+
+        self._set_combo_text(self.cmb_target, payload.get("target", ""))
+        self.chk_histag.setChecked(bool(payload.get("use_histag", False)))
+        self.edit_target_stock.setText(str(payload.get("target_stock", "") or ""))
+        self._set_combo_text(self.cmb_target_unit, payload.get("target_stock_unit", ""))
+        self.edit_target_assay.setText(str(payload.get("target_assay", "") or ""))
+        self.edit_buffer.setText(str(payload.get("buffer", "") or ""))
+        self._set_combo_text(self.cmb_capillary, payload.get("capillary", ""))
+        self._set_combo_text(self.cmb_ligand, payload.get("ligand", ""))
+        self.edit_kd.setText(str(payload.get("kd_estimated", "") or ""))
+        self._set_combo_text(self.cmb_kd_unit, payload.get("kd_unit", ""))
+        self.edit_lig_stock.setText(str(payload.get("lig_stock", "") or ""))
+        self._set_combo_text(self.cmb_lig_unit, payload.get("lig_stock_unit", ""))
+        self.chk_dmso.setChecked(bool(payload.get("lig_in_dmso", False)))
+        self.edit_hi_conc.setText(str(payload.get("hi_conc", "") or ""))
+        self.chk_auto.setChecked(bool(payload.get("excitation_auto", True)))
+        self.spin_excitation.setValue(int(payload.get("excitation_pct", 20) or 20))
+        self._set_combo_text(self.cmb_mst, payload.get("mst_power", ""))
 
     def _load_from_state(self) -> None:
         mw = self._mw()
@@ -634,51 +665,3 @@ class ExperimentSetupView(QScrollArea):
             "excitation_pct":    self.spin_excitation.value(),
             "mst_power":         self.cmb_mst.currentText(),   # 低 / 中 / 高
         }
-
-    def set_data(self, data: dict) -> None:
-        if not isinstance(data, dict):
-            return
-
-        def _set_combo(combo: QComboBox, value: object) -> None:
-            text = str(value or "")
-            idx = combo.findText(text)
-            if idx >= 0:
-                combo.setCurrentIndex(idx)
-
-        _set_combo(self.cmb_target, data.get("target"))
-        self.chk_histag.setChecked(bool(data.get("use_histag", False)))
-        self.edit_target_stock.setText(str(data.get("target_stock", "") or ""))
-        _set_combo(self.cmb_target_unit, data.get("target_stock_unit"))
-        self.edit_target_assay.setText(str(data.get("target_assay", "") or ""))
-        self.edit_buffer.setText(str(data.get("buffer", "") or ""))
-        _set_combo(self.cmb_capillary, data.get("capillary"))
-        _set_combo(self.cmb_ligand, data.get("ligand"))
-        self.edit_kd.setText(str(data.get("kd_estimated", "") or ""))
-        _set_combo(self.cmb_kd_unit, data.get("kd_unit"))
-        self.edit_lig_stock.setText(str(data.get("lig_stock", "") or ""))
-        _set_combo(self.cmb_lig_unit, data.get("lig_stock_unit"))
-        self.chk_dmso.setChecked(bool(data.get("lig_in_dmso", False)))
-        self.edit_hi_conc.setText(str(data.get("hi_conc", "") or ""))
-        self.chk_auto.setChecked(bool(data.get("excitation_auto", True)))
-        try:
-            self.spin_excitation.setValue(int(data.get("excitation_pct", self.spin_excitation.value()) or self.spin_excitation.value()))
-        except Exception:
-            pass
-        _set_combo(self.cmb_mst, data.get("mst_power"))
-
-    def set_experiment_type(self, experiment_type_id: str) -> None:
-        mw = self._mw()
-        if hasattr(mw, "current_experiment_type_id"):
-            mw.current_experiment_type_id = str(experiment_type_id or "pre_test")
-
-    def apply_current_experiment_plan(self) -> bool:
-        mw = self._mw()
-        if not hasattr(mw, "save_current_experiment_plan"):
-            self._set_status("?????????????", "danger")
-            return False
-        ok = bool(mw.save_current_experiment_plan())
-        if ok:
-            self._set_status("?  ???? Plan ?????????????", "success")
-        else:
-            self._set_status("???? Plan ????", "danger")
-        return ok

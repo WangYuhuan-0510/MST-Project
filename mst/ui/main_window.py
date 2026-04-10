@@ -38,6 +38,7 @@ class MainWindow(QMainWindow):
         self.current_experiment_type_id: str = "pre_test"
         self._experiment_status_by_id: dict[str, str] = {}
         self._plan_snapshot_by_experiment_key: dict[str, dict] = {}
+        self._experiment_display_name_by_id: dict[str, str] = {}
 
         # ── 堆叠页面 ──────────────────────────────────────────────────────
         self._stack = QStackedWidget(self)
@@ -69,6 +70,8 @@ class MainWindow(QMainWindow):
             self.project_view.sidebar.close_btn.clicked.connect(self._go_welcome)
             self.project_view.sidebar.new_btn.clicked.connect(self._on_new_exp)
             self.project_view.sidebar.experiment_selected.connect(self._on_experiment_selected)
+            self.project_view.sidebar.experiment_rename_requested.connect(self._on_experiment_rename_requested)
+            self.project_view.sidebar.experiment_delete_requested.connect(self._on_experiment_delete_requested)
         return self.project_view
 
     def _experiment_dir(self, experiment_id: str) -> Path | None:
@@ -109,7 +112,8 @@ class MainWindow(QMainWindow):
                 continue
             exp = Experiment.load_h5(h5_path)
             exp_id = str(child.name).strip()
-            exp_name = str(exp.name or child.name)
+            exp_name = str(self._experiment_display_name_by_id.get(exp_id) or exp.metadata.get("display_name") or exp.name or child.name)
+            self._experiment_display_name_by_id[exp_id] = exp_name
             status = self._experiment_status_by_id.get(exp.id, self._experiment_status_by_id.get(exp_id, "draft"))
             exp_type_id = normalize_experiment_type_id(
                 str(exp.metadata.get("experiment_type_id") or exp.metadata.get("experiment_type") or "pre_test")
@@ -143,6 +147,68 @@ class MainWindow(QMainWindow):
         if selected == (self.current_experiment_id or "") and self.current_experiment_path and Path(self.current_experiment_path).exists():
             return
         self._load_experiment_from_id(selected)
+
+    def _on_experiment_rename_requested(self, experiment_id: str) -> None:
+        if self.project_view is None:
+            return
+        exp_id = str(experiment_id or "").strip()
+        if not exp_id:
+            return
+        h5_path = self._experiment_h5_path(exp_id)
+        if h5_path is None or not h5_path.exists():
+            return
+
+        exp = Experiment.load_h5(h5_path)
+        current_name = str(self._experiment_display_name_by_id.get(exp_id) or exp.metadata.get("display_name") or exp.name or "experiment")
+        new_name, ok = self.project_view.prompt_rename(current_name)
+        if not ok or not new_name:
+            return
+
+        exp.name = new_name
+        exp.metadata["display_name"] = new_name
+        exp.save_h5(h5_path)
+        self._experiment_display_name_by_id[exp_id] = new_name
+        self._refresh_sidebar_experiments()
+        if exp_id == (self.current_experiment_id or ""):
+            self.project_view.select_experiment(exp_id)
+
+    def _on_experiment_delete_requested(self, experiment_id: str) -> None:
+        exp_id = str(experiment_id or "").strip()
+        if not exp_id or self.current_project_dir is None:
+            return
+
+        exp_dir = self._experiment_dir(exp_id)
+        if exp_dir is None or not exp_dir.exists():
+            return
+
+        was_current = exp_id == (self.current_experiment_id or "")
+        h5_path = exp_dir / "experiment.h5"
+
+        if h5_path.exists():
+            try:
+                h5_path.unlink()
+            except Exception:
+                pass
+
+        try:
+            exp_dir.rmdir()
+        except Exception:
+            pass
+
+        self._experiment_status_by_id.pop(exp_id, None)
+        self._experiment_display_name_by_id.pop(exp_id, None)
+        self._plan_snapshot_by_experiment_key.pop(exp_id, None)
+
+        if was_current:
+            self.current_experiment_id = None
+            self.current_experiment_path = None
+
+        self._refresh_sidebar_experiments()
+
+        if was_current and self.project_view is not None:
+            remaining = [btn.experiment_id for btn in self.project_view.sidebar._exp_buttons if btn.experiment_id]
+            if remaining:
+                self._load_experiment_from_id(remaining[0])
 
     # ── Slots ─────────────────────────────────────────────────────────────
 
@@ -227,7 +293,7 @@ class MainWindow(QMainWindow):
                 self._plan_snapshot_by_experiment_key[key] = dict(setup_params or {})
 
             exp = Experiment.from_ui(
-                name=Path(self.current_experiment_path).parent.name,
+                name=self._experiment_display_name_by_id.get(self.current_experiment_id, Path(self.current_experiment_path).parent.name),
                 setup_params=setup_params,
                 excitation=self.current_excitation,
                 experiment_type=self.current_experiment_type,
@@ -258,6 +324,7 @@ class MainWindow(QMainWindow):
                     name=exp_dir.name,
                 )
             self._experiment_status_by_id[self.current_experiment_id] = "draft"
+            self._experiment_display_name_by_id[self.current_experiment_id] = "experiment"
             self._refresh_sidebar_experiments()
             self.project_view.select_experiment(self.current_experiment_id)
             self.state.current_session.setup_data = {}
@@ -283,6 +350,7 @@ class MainWindow(QMainWindow):
             self.state.current_session.experiment_type_id = loaded_type_id
             self.state.current_session.setup_data = dict(exp.setup_data or {})
             self.current_experiment_id = str(Path(path).parent.name)
+            self._experiment_display_name_by_id[self.current_experiment_id] = str(exp.metadata.get("display_name") or exp.name or Path(path).parent.name)
 
             if hasattr(run_view, "clear_view_state"):
                 run_view.clear_view_state()
