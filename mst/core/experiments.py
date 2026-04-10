@@ -200,6 +200,15 @@ class Experiment:
         if fit is not None:
             self.processed["dose_response_x_fit"] = [float(v) for v in getattr(fit, "x_fit", [])]
             self.processed["dose_response_y_fit"] = [float(v) for v in getattr(fit, "y_fit", [])]
+            fit_params = getattr(fit, "params", None)
+            if fit_params:
+                self.processed["dose_response_fit_params"] = {
+                    "bottom": float(fit_params.get("bottom", 0.0)),
+                    "top": float(fit_params.get("top", 0.0)),
+                    "ec50": float(fit_params.get("ec50", 0.0)),
+                    "hill": float(fit_params.get("hill", 0.0)),
+                    "r_squared": float(fit_params.get("r_squared", 0.0)),
+                }
 
         self.run_data = {
             "enabled_mask": [bool(v) for v in (getattr(vm, "enabled_mask", []) or [])],

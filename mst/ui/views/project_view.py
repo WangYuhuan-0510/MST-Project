@@ -2,13 +2,12 @@
 project_view.py
 ───────────────
 实验管理主界面框架。
-左侧固定侧边栏 + 右侧四标签页，切换页面时侧边栏保持不变。
+左侧固定侧边栏 + 右侧三标签页，切换页面时侧边栏保持不变。
 
 页面映射
   Plan         →  ExperimentSetupView  (experiment_setup_view.py)
   Instructions →  InstructionsPage     (内联占位，可按需替换)
   Results      →  RunView              (run_view.py)
-  Details      →  AnalysisView         (analysis_view.py)
 """
 from __future__ import annotations
 
@@ -30,7 +29,6 @@ from mst.core.experiment_schema import get_experiment_type_config, normalize_exp
 # ── 页面实现 ────────────────────────────────────────────────────────────────
 from .experiment_setup_view import ExperimentSetupView   # Plan
 from .run_view              import RunView               # Results
-from .analysis_view         import AnalysisView          # Details
 from .sidebar_experiment_item import ExperimentItem
 
 
@@ -96,11 +94,11 @@ class NewExperimentButton(QPushButton):
 
 
 # ─────────────────────────────────────────────
-#  Tab bar  (Plan / Instructions / Results / Details)
+#  Tab bar  (Plan / Instructions / Results)
 # ─────────────────────────────────────────────
 class PageTabBar(QWidget):
     page_changed = Signal(int)
-    TABS = ["Plan", "Instructions", "Results", "Details"]
+    TABS = ["Plan", "Instructions", "Results"]
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -518,7 +516,6 @@ class ContentArea(QWidget):
         self.stack.addWidget(ExperimentSetupView())  # 0 – Plan
         self.stack.addWidget(InstructionsPage())      # 1 – Instructions
         self.stack.addWidget(RunView())               # 2 – Results
-        self.stack.addWidget(AnalysisView())          # 3 – Details
         body.addWidget(self.stack, 1)
 
         # 右侧独立空白区：与实验设置同层并排，不覆盖内容
@@ -552,7 +549,7 @@ class ProjectView(QWidget):
     """
     实验管理主界面。
     左侧固定侧边栏（保存 / 关闭 / 实验列表 / 新建实验）。
-    右侧内容区在 Plan / Instructions / Results / Details 四页间切换；
+    右侧内容区在 Plan / Instructions / Results 三页间切换；
     切换时侧边栏完全不受影响。
     """
 

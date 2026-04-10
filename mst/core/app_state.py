@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 from mst.core.experiment_schema import default_setup_data
 
@@ -15,15 +15,6 @@ class SimulationConfig:
     n_points: int = 60
     x_min: float = 0.05
     x_max: float = 10.0
-
-
-@dataclass
-class LastRun:
-    """专门用于存储拟合结果（Kd值、R²相关系数）。"""
-    x: List[float] = field(default_factory=list)
-    y: List[float] = field(default_factory=list)
-    fit_kd: Optional[float] = None
-    fit_r_squared: Optional[float] = None
 
 
 @dataclass
@@ -40,5 +31,4 @@ class AppState:
 
     workspace_dir: Path = field(default_factory=lambda: Path.cwd())
     sim: SimulationConfig = field(default_factory=SimulationConfig)
-    last_run: LastRun = field(default_factory=LastRun)
     current_session: ExperimentSession = field(default_factory=ExperimentSession)
