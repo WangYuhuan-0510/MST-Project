@@ -17,7 +17,6 @@ from PySide6.QtCore import Qt
 
 from .ui_style import (
     PALETTE,
-    primary_btn_style,
     secondary_btn_style,
     label_style,
     divider,
@@ -273,7 +272,7 @@ class ExcitationSpinBox(QSpinBox):
 
 class ExperimentSetupView(QScrollArea):
     """
-    实验计划页面（Plan）。
+    实验设置页面。
     五区块：分析物 / 配体 / 缓冲液 / 毛细管 / 系统设置。
     """
 
@@ -567,21 +566,6 @@ class ExperimentSetupView(QScrollArea):
 
         right_col.addWidget(sys_card)
 
-        # ── 应用按钮（右栏，系统设置下方）───────────────────────────────────
-        apply_row = QHBoxLayout()
-        self.btn_apply = QPushButton("应用")
-        self.btn_apply.setFixedHeight(38)
-        self.btn_apply.setStyleSheet(primary_btn_style())
-        self.btn_apply.clicked.connect(self.apply_to_state)
-        self.status_lbl = QLabel("")
-        self.status_lbl.setStyleSheet(
-            f"color: {PALETTE['success']}; font-size: 12px; font-weight: 500;"
-        )
-        apply_row.addWidget(self.btn_apply)
-        apply_row.addSpacing(12)
-        apply_row.addWidget(self.status_lbl)
-        apply_row.addStretch()
-        right_col.addLayout(apply_row)
         right_col.addStretch()
 
         two_col.addLayout(left_col, 1)
@@ -589,18 +573,10 @@ class ExperimentSetupView(QScrollArea):
         root.addLayout(two_col)
         root.addStretch()
 
-        self._load_from_state()
-
     # ── Private helpers ──────────────────────────────────────────────────────
 
     def _mw(self):
         return self.window()
-
-    def _set_status(self, text: str, color_key: str = "success") -> None:
-        self.status_lbl.setText(text)
-        self.status_lbl.setStyleSheet(
-            f"color: {PALETTE[color_key]}; font-size: 12px; font-weight: 500;"
-        )
 
     def _set_combo_text(self, combo: QComboBox, value: str) -> None:
         text = str(value or "").strip()
@@ -633,42 +609,6 @@ class ExperimentSetupView(QScrollArea):
         self.chk_auto.setChecked(bool(payload.get("excitation_auto", True)))
         self.spin_excitation.setValue(int(payload.get("excitation_pct", 10) or 10))
         self._set_combo_text(self.cmb_mst, payload.get("mst_power", ""))
-
-    def _load_from_state(self) -> None:
-        mw = self._mw()
-        if not hasattr(mw, "state"):
-            return
-        sim = getattr(mw.state, "sim", None)
-        if sim is None:
-            return
-        try:
-            self.edit_kd.setText(str(sim.kd_true))
-            self.edit_target_stock.setText(str(sim.r_max_true))
-        except Exception:
-            pass
-
-    # ── Public slots ─────────────────────────────────────────────────────────
-
-    def apply_to_state(self) -> None:
-        mw = self._mw()
-        if not hasattr(mw, "state"):
-            self._set_status("未找到主窗口状态（state）", "danger")
-            return
-        sim = getattr(mw.state, "sim", None)
-        if sim is None:
-            self._set_status("state.sim 不存在", "danger")
-            return
-        try:
-            kd_text = self.edit_kd.text().strip()
-            if kd_text:
-                sim.kd_true = float(kd_text)
-            stock_text = self.edit_target_stock.text().strip()
-            if stock_text:
-                sim.r_max_true = float(stock_text)
-        except ValueError as e:
-            self._set_status(f"数值格式错误：{e}", "danger")
-            return
-        self._set_status("✓  已应用：运行页将按此参数生成模拟数据。", "success")
 
     def get_params(self) -> dict:
         """返回当前界面所有参数的字典快照（供其他模块读取）。"""
