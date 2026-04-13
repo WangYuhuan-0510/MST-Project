@@ -457,6 +457,37 @@ class MainWindow(QMainWindow):
             if remaining:
                 self._load_experiment_from_id(remaining[0])
 
+    def _prepare_new_experiment_session(self) -> bool:
+        if self.current_project_dir is None:
+            QMessageBox.warning(self, "新建实验失败", "未选择实验项目目录")
+            return False
+
+        self.current_experiment_id = Experiment().id
+        exp_dir = self.current_project_dir / self.current_experiment_id
+        self.current_experiment_path = str(exp_dir / "experiment.h5")
+        self._experiment_status_by_id[self.current_experiment_id] = "draft"
+        self._experiment_display_name_by_id[self.current_experiment_id] = "experiment"
+
+        state = ExperimentSessionState(
+            experiment_id=self.current_experiment_id,
+            display_name="experiment",
+            excitation="RED",
+            experiment_type_id="pre_test",
+            experiment_type_name="Pre-test",
+            plan_snapshot={},
+            is_dirty=True,
+            lifecycle_status="draft",
+        )
+        self._session_state_by_experiment_id[self.current_experiment_id] = state
+        self.current_excitation = state.excitation
+        self.current_experiment_type_id = state.experiment_type_id
+        self.current_experiment_type = state.experiment_type_name
+        self.state.current_session.experiment_type_id = state.experiment_type_id
+        self.state.current_session.setup_data = default_setup_data(state.experiment_type_id)
+        self._set_base_window_title_for_path(self.current_experiment_path)
+        self._refresh_window_title()
+        return True
+
     # ── Slots ─────────────────────────────────────────────────────────────
 
     def _on_session_opened(self, experiment_path: str) -> None:
@@ -577,42 +608,19 @@ class MainWindow(QMainWindow):
             QMessageBox.critical(self, "保存错误", f"实验数据保存失败\n{e}")
 
     def _on_new_exp(self) -> None:
-        if self.project_view and self.current_project_dir is not None:
-            self.current_experiment_id = Experiment().id
-            exp_dir = self.current_project_dir / self.current_experiment_id
-            self.current_experiment_path = str(exp_dir / "experiment.h5")
-            self._set_base_window_title_for_path(self.current_experiment_path)
-            self.project_view.content.tab_bar._select(0)
-            setup_view = self.project_view.content.stack.widget(0)
-            run_view = self.project_view.content.stack.widget(2)
-            if hasattr(run_view, "data_manager"):
-                run_view.data_manager.bind_experiment_by_id(
-                    self.current_experiment_id,
-                    project_dir=self.current_project_dir,
-                    name=exp_dir.name,
-                )
-            self._experiment_status_by_id[self.current_experiment_id] = "draft"
-            self._experiment_display_name_by_id[self.current_experiment_id] = "experiment"
-            self.state.current_session.setup_data = dict(setup_view.get_params() or {}) if hasattr(setup_view, "get_params") else {}
-            state = self._ensure_session_state(self.current_experiment_id, display_name="experiment")
-            state.excitation = self.current_excitation
-            state.experiment_type_id = self.current_experiment_type_id
-            state.experiment_type_name = self.current_experiment_type
-            state.plan_snapshot = dict(self.state.current_session.setup_data)
-            state.lifecycle_status = "draft"
-            state.is_dirty = True
-            self._refresh_sidebar_experiments()
-            self.project_view.select_experiment(self.current_experiment_id)
-            self._plan_snapshot_by_experiment_key[self._experiment_key(experiment_id=self.current_experiment_id, path=self.current_experiment_path)] = dict(self.state.current_session.setup_data)
-            if hasattr(setup_view, "set_experiment_type"):
-                setup_view.set_experiment_type(self.current_experiment_type_id)
-                setup_view.set_plan_lock_state(locked=False, allow_plan_edit=False)
-            self._refresh_window_title()
-            self.project_view.update_metadata({
-                "experiment_type": self.current_experiment_type,
-                "excitation": self.current_excitation,
-                **dict(self.state.current_session.setup_data or {}),
-            })
+        if self.project_view is None or self.current_project_dir is None:
+            QMessageBox.warning(self, "新建实验失败", "未加载实验项目界面或未选择实验项目目录")
+            return
+
+        self._capture_current_plan_snapshot()
+        if not self._prepare_new_experiment_session():
+            return
+
+        self.wizard.reset()
+        self._refresh_sidebar_experiments()
+        if self.project_view is not None:
+            self.project_view.select_experiment(self.current_experiment_id or "")
+        self._stack.setCurrentIndex(1)
 
     def _load_experiment_into_ui(self, path: str, pv: ProjectView) -> None:
         try:
