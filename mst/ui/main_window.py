@@ -51,6 +51,8 @@ class MainWindow(QMainWindow):
         self.current_experiment_type: str = "Pre-test"
         self.current_experiment_type_id: str = "pre_test"
         self._experiment_status_by_id: dict[str, str] = {}
+        self._experiment_order_by_id: dict[str, int] = {}
+        self._next_experiment_order: int = 1
         self._plan_snapshot_by_experiment_key: dict[str, dict] = {}
         self._experiment_display_name_by_id: dict[str, str] = {}
         self._session_state_by_experiment_id: dict[str, ExperimentSessionState] = {}
@@ -200,6 +202,22 @@ class MainWindow(QMainWindow):
             return str(Path(path).parent.name).strip()
         return str(experiment_id or "").strip()
 
+    def _get_or_assign_experiment_order(self, experiment_id: str, preferred_order: int | None = None) -> int:
+        exp_id = str(experiment_id or "").strip()
+        if not exp_id:
+            return 0
+        if exp_id in self._experiment_order_by_id:
+            return self._experiment_order_by_id[exp_id]
+
+        order = int(preferred_order or 0)
+        if order > 0 and order not in self._experiment_order_by_id.values():
+            self._experiment_order_by_id[exp_id] = order
+            self._next_experiment_order = max(self._next_experiment_order, order + 1)
+        else:
+            self._experiment_order_by_id[exp_id] = self._next_experiment_order
+            self._next_experiment_order += 1
+        return self._experiment_order_by_id[exp_id]
+
     def _capture_current_plan_snapshot(self) -> None:
         if self.project_view is None or not self.current_experiment_id:
             return
@@ -266,10 +284,9 @@ class MainWindow(QMainWindow):
         if self.project_view is None or self.current_project_dir is None:
             return
 
-        experiments: list[tuple[str, str, str, str, str, int]] = []
-        for order_index, child in enumerate(sorted(self.current_project_dir.iterdir(), key=lambda p: p.name.lower()), start=1):
-            if not child.is_dir():
-                continue
+        experiments: list[tuple[int, str, str, str, str, str]] = []
+        children = [child for child in self.current_project_dir.iterdir() if child.is_dir()]
+        for child in children:
             h5_path = child / "experiment.h5"
             if not h5_path.exists():
                 continue
@@ -288,9 +305,15 @@ class MainWindow(QMainWindow):
             state.experiment_type_id = exp_type_id
             state.experiment_type_name = exp_type_name
             state.excitation = str(exp.metadata.get("excitation") or state.excitation or "RED")
-            experiments.append((exp_id, exp_name, status, exp_type_id, exp_type_name, order_index))
+            metadata_order = int(str(exp.metadata.get("experiment_order") or "0") or "0")
+            order_index = self._get_or_assign_experiment_order(exp_id, metadata_order)
+            experiments.append((order_index, exp_id, exp_name, status, exp_type_id, exp_type_name))
 
-        self.project_view.set_experiments(experiments)
+        experiments.sort(key=lambda item: item[0])
+        self.project_view.set_experiments([
+            (exp_id, exp_name, status, exp_type_id, exp_type_name, order_index)
+            for order_index, exp_id, exp_name, status, exp_type_id, exp_type_name in experiments
+        ])
         if self.current_experiment_id:
             self.project_view.select_experiment(self.current_experiment_id)
 
@@ -336,6 +359,7 @@ class MainWindow(QMainWindow):
             experiment_type_id=exp_type_id,
             experiment_id=exp_id,
         )
+        exp.metadata["experiment_order"] = str(self._get_or_assign_experiment_order(exp_id))
 
         if exp_id == (self.current_experiment_id or ""):
             exp.capture_from_run_view(run_view)
@@ -441,6 +465,7 @@ class MainWindow(QMainWindow):
             pass
 
         self._experiment_status_by_id.pop(exp_id, None)
+        self._experiment_order_by_id.pop(exp_id, None)
         self._experiment_display_name_by_id.pop(exp_id, None)
         self._plan_snapshot_by_experiment_key.pop(exp_id, None)
         self._session_state_by_experiment_id.pop(exp_id, None)
@@ -463,6 +488,7 @@ class MainWindow(QMainWindow):
             return False
 
         self.current_experiment_id = Experiment().id
+        self._get_or_assign_experiment_order(self.current_experiment_id)
         exp_dir = self.current_project_dir / self.current_experiment_id
         self.current_experiment_path = str(exp_dir / "experiment.h5")
         self._experiment_status_by_id[self.current_experiment_id] = "draft"
@@ -496,6 +522,7 @@ class MainWindow(QMainWindow):
         self.current_experiment_path = experiment_path
         loaded = Experiment.load_h5(experiment_path)
         self.current_experiment_id = loaded.id
+        self._get_or_assign_experiment_order(self.current_experiment_id)
         self._set_base_window_title_for_path(experiment_path)
         self.current_excitation = str(loaded.metadata.get("excitation") or self.current_excitation)
         self.current_experiment_type_id = normalize_experiment_type_id(
@@ -641,6 +668,7 @@ class MainWindow(QMainWindow):
             self.state.current_session.experiment_type_id = loaded_type_id
             self.state.current_session.setup_data = dict(exp.setup_data or {})
             self.current_experiment_id = str(Path(path).parent.name)
+            self._get_or_assign_experiment_order(self.current_experiment_id)
             display_name = str(exp.metadata.get("display_name") or exp.name or Path(path).parent.name)
             self._experiment_display_name_by_id[self.current_experiment_id] = display_name
             state = self._ensure_session_state(self.current_experiment_id, display_name=display_name)

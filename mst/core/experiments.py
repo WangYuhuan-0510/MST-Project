@@ -42,6 +42,7 @@ class Experiment:
             "excitation": "",     # 激发光波长/类型
             "experiment_type": "Pre-test", # 实验类型名称（兼容旧字段）
             "experiment_type_id": "pre_test", # 实验类型 ID（配置驱动）
+            "experiment_order": "0", # 实验在队列中的顺序
         }
     )
     
@@ -116,6 +117,7 @@ class Experiment:
         exp.metadata["excitation"] = excitation or ""
         exp.metadata["experiment_type_id"] = type_id
         exp.metadata["experiment_type"] = type_cfg.get("name", experiment_type or "Pre-test")
+        exp.metadata["experiment_order"] = str(exp.metadata.get("experiment_order", "0") or "0")
 
         # 填充协议设置：控制设备采集、运行的参数
         exp.protocol["led_power"] = int(exp.setup_data.get("excitation_pct", 20) or 20)
@@ -441,4 +443,5 @@ class Experiment:
                     exp.run_data["mst_t_by_ch"] = t_by_ch
 
         exp.metadata.setdefault("experiment_id", exp.id)
+        exp.metadata.setdefault("experiment_order", "0")
         return exp
