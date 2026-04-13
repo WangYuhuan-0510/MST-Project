@@ -15,6 +15,8 @@ from PySide6.QtWidgets import (
 )
 from PySide6.QtCore import Qt, Signal
 
+from mst.core.experiment_schema import get_experiment_type_config
+
 from .ui_style import (
     PALETTE,
     secondary_btn_style,
@@ -281,6 +283,8 @@ class ExperimentSetupView(QScrollArea):
 
     def __init__(self, parent=None) -> None:
         super().__init__(parent)
+        self._experiment_type_id = "pre_test"
+        self._excitation_color = "RED"
         self.setFrameShape(QFrame.NoFrame)
         self.setWidgetResizable(True)
         self.setStyleSheet(f"background: {PALETTE['bg_main']};")
@@ -629,6 +633,12 @@ class ExperimentSetupView(QScrollArea):
         self.set_fields_enabled(self._system_widgets, False if locked else True)
         self.alter_btn.setEnabled(locked)
 
+    def set_experiment_type(self, experiment_type_id: str) -> None:
+        self._experiment_type_id = str(experiment_type_id or "pre_test")
+
+    def set_excitation_color(self, color: str) -> None:
+        self._excitation_color = str(color or "RED").upper()
+
     def set_data(self, data: dict) -> None:
         """按实验快照/存档回填设置页，保证每个实验互相独立。"""
         payload = dict(data or {})
@@ -650,6 +660,13 @@ class ExperimentSetupView(QScrollArea):
         self.chk_auto.setChecked(bool(payload.get("excitation_auto", True)))
         self.spin_excitation.setValue(int(payload.get("excitation_pct", 10) or 10))
         self._set_combo_text(self.cmb_mst, payload.get("mst_power", ""))
+        self._excitation_color = str(payload.get("excitation", self._excitation_color) or self._excitation_color).upper()
+        self._experiment_type_id = str(
+            payload.get("experiment_type_id")
+            or payload.get("experiment_type")
+            or self._experiment_type_id
+            or "pre_test"
+        )
 
     def get_params(self) -> dict:
         """返回当前界面所有参数的字典快照（供其他模块读取）。"""
@@ -668,6 +685,9 @@ class ExperimentSetupView(QScrollArea):
             "lig_stock_unit":    self.cmb_lig_unit.currentText(),
             "lig_in_dmso":       self.chk_dmso.isChecked(),
             "hi_conc":           self.edit_hi_conc.text(),
+            "excitation":        self._excitation_color,
+            "experiment_type":   str(get_experiment_type_config(self._experiment_type_id).get("name") or self._experiment_type_id),
+            "experiment_type_id": self._experiment_type_id,
             "excitation_auto":   self.chk_auto.isChecked(),
             "excitation_pct":    self.spin_excitation.value(),
             "mst_power":         self.cmb_mst.currentText(),   # 低 / 中 / 高

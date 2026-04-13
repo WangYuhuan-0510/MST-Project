@@ -28,6 +28,9 @@ from .views.project_view import ProjectView
 class ExperimentSessionState:
     experiment_id: str
     display_name: str = "experiment"
+    excitation: str = "RED"
+    experiment_type_id: str = "pre_test"
+    experiment_type_name: str = "Pre-test"
     plan_snapshot: dict[str, Any] = field(default_factory=dict)
     is_dirty: bool = False
     lifecycle_status: str = "draft"
@@ -99,11 +102,34 @@ class MainWindow(QMainWindow):
             state = ExperimentSessionState(
                 experiment_id=exp_id,
                 display_name=str(display_name or self._experiment_display_name_by_id.get(exp_id) or "experiment"),
+                excitation=self.current_excitation,
+                experiment_type_id=self.current_experiment_type_id,
+                experiment_type_name=self.current_experiment_type,
             )
             self._session_state_by_experiment_id[exp_id] = state
         elif display_name:
             state.display_name = str(display_name)
         return state
+
+    def _sync_current_session_state(self) -> None:
+        if not self.current_experiment_id:
+            return
+        state = self._ensure_session_state(
+            self.current_experiment_id,
+            display_name=self._experiment_display_name_by_id.get(self.current_experiment_id, "experiment"),
+        )
+        state.excitation = self.current_excitation
+        state.experiment_type_id = self.current_experiment_type_id
+        state.experiment_type_name = self.current_experiment_type
+
+    def _apply_session_state(self, state: ExperimentSessionState) -> None:
+        self.current_excitation = str(state.excitation or "RED")
+        self.current_experiment_type_id = normalize_experiment_type_id(state.experiment_type_id or "pre_test")
+        self.current_experiment_type = str(
+            state.experiment_type_name
+            or get_experiment_type_config(self.current_experiment_type_id).get("name")
+            or "Pre-test"
+        )
 
     def _any_dirty(self) -> bool:
         return any(state.is_dirty for state in self._session_state_by_experiment_id.values())
@@ -116,7 +142,7 @@ class MainWindow(QMainWindow):
 
     def _set_base_window_title_for_path(self, path: str | None) -> None:
         if path:
-            self._base_window_title = f"PW-MST  -  {path}"
+            self._base_window_title = f"PW-MST-{path}"
         else:
             self._base_window_title = "PW-MST 实验控制平台"
         self._refresh_window_title()
@@ -188,6 +214,7 @@ class MainWindow(QMainWindow):
                 display_name=self._experiment_display_name_by_id.get(self.current_experiment_id, "experiment"),
             )
             state.plan_snapshot = dict(snapshot)
+            self._sync_current_session_state()
             self._mark_dirty(self.current_experiment_id, True)
 
     def _bind_plan_autosave(self) -> None:
@@ -253,11 +280,14 @@ class MainWindow(QMainWindow):
             state = self._ensure_session_state(exp_id, display_name=exp_name)
             status = self._experiment_status_by_id.get(exp.id, self._experiment_status_by_id.get(exp_id, state.lifecycle_status))
             exp_type_id = normalize_experiment_type_id(
-                str(exp.metadata.get("experiment_type_id") or exp.metadata.get("experiment_type") or "pre_test")
+                str(exp.metadata.get("experiment_type_id") or exp.metadata.get("experiment_type") or state.experiment_type_id or "pre_test")
             )
             exp_type_name = str(
-                exp.metadata.get("experiment_type") or get_experiment_type_config(exp_type_id).get("name") or "Pre-test"
+                exp.metadata.get("experiment_type") or state.experiment_type_name or get_experiment_type_config(exp_type_id).get("name") or "Pre-test"
             )
+            state.experiment_type_id = exp_type_id
+            state.experiment_type_name = exp_type_name
+            state.excitation = str(exp.metadata.get("excitation") or state.excitation or "RED")
             experiments.append((exp_id, exp_name, status, exp_type_id, exp_type_name, order_index))
 
         self.project_view.set_experiments(experiments)
@@ -276,16 +306,22 @@ class MainWindow(QMainWindow):
         setup_view = self.project_view.content.stack.widget(0)
         run_view = self.project_view.content.stack.widget(2)
         key = self._experiment_key(experiment_id=exp_id, path=h5_path)
+        state = self._ensure_session_state(exp_id)
 
         if exp_id == (self.current_experiment_id or "") and hasattr(setup_view, "get_params"):
             setup_params = dict(setup_view.get_params() or {})
+            excitation = self.current_excitation
+            exp_type_id = self.current_experiment_type_id
+            exp_type_name = self.current_experiment_type
         else:
-            setup_params = dict(self._plan_snapshot_by_experiment_key.get(key) or self._ensure_session_state(exp_id).plan_snapshot or {})
+            setup_params = dict(self._plan_snapshot_by_experiment_key.get(key) or state.plan_snapshot or {})
+            excitation = state.excitation
+            exp_type_id = state.experiment_type_id
+            exp_type_name = state.experiment_type_name
 
-        exp_type_id = self.current_experiment_type_id
-        exp_type_name = self.current_experiment_type
         if h5_path.exists():
             loaded = Experiment.load_h5(h5_path)
+            excitation = str(loaded.metadata.get("excitation") or excitation or "RED")
             exp_type_id = normalize_experiment_type_id(
                 str(loaded.metadata.get("experiment_type_id") or loaded.metadata.get("experiment_type") or exp_type_id)
             )
@@ -295,7 +331,7 @@ class MainWindow(QMainWindow):
         exp = Experiment.from_ui(
             name=display_name,
             setup_params=setup_params,
-            excitation=self.current_excitation,
+            excitation=excitation,
             experiment_type=exp_type_name,
             experiment_type_id=exp_type_id,
             experiment_id=exp_id,
@@ -315,7 +351,10 @@ class MainWindow(QMainWindow):
             })
 
         exp.save_h5(h5_path)
-        state = self._ensure_session_state(exp_id, display_name=display_name)
+        state.display_name = str(display_name)
+        state.excitation = excitation
+        state.experiment_type_id = exp_type_id
+        state.experiment_type_name = exp_type_name
         state.plan_snapshot = dict(setup_params)
         state.is_dirty = False
         self._experiment_status_by_id[exp_id] = "done"
@@ -427,10 +466,20 @@ class MainWindow(QMainWindow):
         loaded = Experiment.load_h5(experiment_path)
         self.current_experiment_id = loaded.id
         self._set_base_window_title_for_path(experiment_path)
-        self._ensure_session_state(
+        self.current_excitation = str(loaded.metadata.get("excitation") or self.current_excitation)
+        self.current_experiment_type_id = normalize_experiment_type_id(
+            str(loaded.metadata.get("experiment_type_id") or loaded.metadata.get("experiment_type") or self.current_experiment_type_id)
+        )
+        self.current_experiment_type = str(
+            loaded.metadata.get("experiment_type") or get_experiment_type_config(self.current_experiment_type_id).get("name") or self.current_experiment_type
+        )
+        state = self._ensure_session_state(
             loaded.id,
             display_name=str(loaded.metadata.get("display_name") or loaded.name or Path(experiment_path).parent.name),
         )
+        state.excitation = self.current_excitation
+        state.experiment_type_id = self.current_experiment_type_id
+        state.experiment_type_name = self.current_experiment_type
         self.wizard.reset()
         self._stack.setCurrentIndex(1)
 
@@ -452,6 +501,8 @@ class MainWindow(QMainWindow):
         if hasattr(setup_view, "set_experiment_type"):
             setup_view.set_experiment_type(self.current_experiment_type_id)
             setup_view.set_plan_lock_state(locked=False, allow_plan_edit=False)
+        if hasattr(setup_view, "set_excitation_color"):
+            setup_view.set_excitation_color(self.current_excitation)
 
         if self.current_project_dir is not None and hasattr(run_view, "data_manager"):
             dm: DataManager = run_view.data_manager
@@ -468,6 +519,9 @@ class MainWindow(QMainWindow):
                 self.current_experiment_id,
                 display_name=self._experiment_display_name_by_id.get(self.current_experiment_id, "experiment"),
             )
+            state.excitation = self.current_excitation
+            state.experiment_type_id = self.current_experiment_type_id
+            state.experiment_type_name = self.current_experiment_type
             state.lifecycle_status = "draft"
             state.is_dirty = True
 
@@ -475,11 +529,19 @@ class MainWindow(QMainWindow):
         self._refresh_sidebar_experiments()
 
         path = self.current_experiment_path
-        if path and Path(path).exists():
+        should_reload_saved_experiment = bool(path and Path(path).exists() and self.current_experiment_id and self.current_experiment_id in self._session_state_by_experiment_id and self._session_state_by_experiment_id[self.current_experiment_id].plan_snapshot)
+        if should_reload_saved_experiment:
             self._load_experiment_into_ui(path, pv)
         else:
             self._apply_setup_lock_state()
             self._refresh_window_title()
+            if self.current_experiment_id:
+                self._sync_current_session_state()
+                pv.update_metadata({
+                    "experiment_type": self.current_experiment_type,
+                    "excitation": self.current_excitation,
+                    **dict(self.state.current_session.setup_data or {}),
+                })
 
     def _go_welcome(self) -> None:
         """返回欢迎页"""
@@ -533,6 +595,9 @@ class MainWindow(QMainWindow):
             self._experiment_display_name_by_id[self.current_experiment_id] = "experiment"
             self.state.current_session.setup_data = dict(setup_view.get_params() or {}) if hasattr(setup_view, "get_params") else {}
             state = self._ensure_session_state(self.current_experiment_id, display_name="experiment")
+            state.excitation = self.current_excitation
+            state.experiment_type_id = self.current_experiment_type_id
+            state.experiment_type_name = self.current_experiment_type
             state.plan_snapshot = dict(self.state.current_session.setup_data)
             state.lifecycle_status = "draft"
             state.is_dirty = True
@@ -543,6 +608,11 @@ class MainWindow(QMainWindow):
                 setup_view.set_experiment_type(self.current_experiment_type_id)
                 setup_view.set_plan_lock_state(locked=False, allow_plan_edit=False)
             self._refresh_window_title()
+            self.project_view.update_metadata({
+                "experiment_type": self.current_experiment_type,
+                "excitation": self.current_excitation,
+                **dict(self.state.current_session.setup_data or {}),
+            })
 
     def _load_experiment_into_ui(self, path: str, pv: ProjectView) -> None:
         try:
@@ -554,6 +624,7 @@ class MainWindow(QMainWindow):
                 str(exp.metadata.get("experiment_type_id") or exp.metadata.get("experiment_type") or self.current_experiment_type_id)
             )
             self.current_experiment_type_id = loaded_type_id
+            self.current_excitation = str(exp.metadata.get("excitation") or self.current_excitation or "RED")
 
             type_items = list_experiment_types()
             name_by_id = {t.get("id"): t.get("name", "") for t in type_items}
@@ -565,6 +636,9 @@ class MainWindow(QMainWindow):
             display_name = str(exp.metadata.get("display_name") or exp.name or Path(path).parent.name)
             self._experiment_display_name_by_id[self.current_experiment_id] = display_name
             state = self._ensure_session_state(self.current_experiment_id, display_name=display_name)
+            state.excitation = self.current_excitation
+            state.experiment_type_id = loaded_type_id
+            state.experiment_type_name = str(exp.metadata.get("experiment_type") or get_experiment_type_config(loaded_type_id).get("name") or self.current_experiment_type)
             if not state.plan_snapshot:
                 state.plan_snapshot = dict(exp.setup_data or {})
 
@@ -580,6 +654,8 @@ class MainWindow(QMainWindow):
 
             if hasattr(setup_view, "set_experiment_type"):
                 setup_view.set_experiment_type(loaded_type_id)
+            if hasattr(setup_view, "set_excitation_color"):
+                setup_view.set_excitation_color(self.current_excitation)
             snapshot = self._plan_snapshot_by_experiment_key.get(self._experiment_key(path=path, experiment_id=self.current_experiment_id)) or state.plan_snapshot
             if snapshot and hasattr(setup_view, "set_data"):
                 setup_view.set_data(snapshot)

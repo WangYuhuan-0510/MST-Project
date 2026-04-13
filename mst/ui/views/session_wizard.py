@@ -217,6 +217,8 @@ class _ExperimentPage(QWidget):
         for item in self._type_items:
             exp_id = str(item.get("id", "pre_test"))
             name = str(item.get("name", exp_id))
+            if name.casefold() == "binding test":
+                name = "Binding Check"
             icon = str(item.get("icon", "●"))
 
             row = QHBoxLayout()

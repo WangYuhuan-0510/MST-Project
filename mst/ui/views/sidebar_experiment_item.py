@@ -32,7 +32,10 @@ class ExperimentItem(QPushButton):
         self.experiment_name = str(name or "未命名实验").strip() or "未命名实验"
         self.experiment_type_id = normalize_experiment_type_id(experiment_type_id or "pre_test")
         type_cfg = get_experiment_type_config(self.experiment_type_id)
-        self.experiment_type_name = str(experiment_type_name or type_cfg.get("name") or "Pre-test")
+        default_type_name = str(type_cfg.get("name") or "Pre-test")
+        self.experiment_type_name = str(experiment_type_name or default_type_name or "Pre-test")
+        if self.experiment_type_name.casefold() == "binding test":
+            self.experiment_type_name = "binding check"
         self.order_index = max(1, int(order_index or 1))
         self.icon_path = Path(__file__).resolve().parent / "icons" / f"{self.experiment_type_id}.svg"
 

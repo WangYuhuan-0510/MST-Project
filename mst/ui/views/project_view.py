@@ -471,9 +471,10 @@ class DataPanel(QFrame):
         self._blk_cap.set_label("毛细管")
         self._blk_cap.set_value(cap_short)
 
-        auto     = params.get("excitation_auto", True)
-        ex_pct   = params.get("excitation_pct", 20)
-        ex_text  = f"Auto-detect  {ex_pct} %" if auto else f"{ex_pct} %"
+        auto = params.get("excitation_auto", True)
+        ex_pct = params.get("excitation_pct", 20)
+        excitation = str(params.get("excitation", "RED") or "RED").upper()
+        ex_text = f"Auto-detect  {ex_pct} % {excitation}" if auto else f"{ex_pct} % {excitation}"
         self._blk_excit.set_label("激发光功率")
         self._blk_excit.set_value(ex_text)
 
@@ -612,8 +613,10 @@ class ProjectView(QWidget):
             "hi_conc": str(metadata.get("hi_conc", "?") or "?"),
             "buffer": str(metadata.get("buffer", "?") or "?"),
             "capillary": str(metadata.get("capillary", "?") or "?"),
+            "excitation": str(metadata.get("excitation", "RED") or "RED"),
+            "experiment_type": str(metadata.get("experiment_type", "Pre-test") or "Pre-test"),
             "excitation_auto": str(metadata.get("excitation_auto", "True") or "True").lower() in {"1", "true", "yes", "on"},
-            "excitation_pct": metadata.get("excitation_pct", 20),
+            "excitation_pct": metadata.get("excitation_pct", metadata.get("led_power", 20)),
             "mst_power": str(metadata.get("mst_power", "?") or "?"),
         }
         self.content.data_panel.update_from_params(params)
