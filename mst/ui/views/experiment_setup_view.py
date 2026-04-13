@@ -13,7 +13,7 @@ from PySide6.QtWidgets import (
     QSpinBox, QPushButton, QLabel,
     QFrame, QScrollArea, QLineEdit, QComboBox, QCheckBox,
 )
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, Signal
 
 from .ui_style import (
     PALETTE,
@@ -169,8 +169,8 @@ def _check_style() -> str:
 
 
 def _help_btn() -> QPushButton:
-    btn = QPushButton("?")
-    btn.setFixedSize(24, 24)
+    btn = QPushButton("??")
+    btn.setFixedSize(40, 24)
     btn.setCursor(Qt.PointingHandCursor)
     btn.setStyleSheet(f"""
         QPushButton {{
@@ -178,8 +178,9 @@ def _help_btn() -> QPushButton:
             border: 1px solid {PALETTE['border']};
             border-radius: 5px;
             color: {PALETTE['text_muted']};
-            font-size: 11px;
+            font-size: 10px;
             font-weight: 700;
+            padding: 0 6px;
         }}
         QPushButton:hover {{
             background: {PALETTE['bg_active']};
@@ -271,9 +272,11 @@ class ExcitationSpinBox(QSpinBox):
 # ─────────────────────────────────────────────────────────────────────────────
 
 class ExperimentSetupView(QScrollArea):
+    edit_requested = Signal()
+
     """
-    实验设置页面。
-    五区块：分析物 / 配体 / 缓冲液 / 毛细管 / 系统设置。
+    ???????
+    ??????? / ?? / ??? / ??? / ?????
     """
 
     def __init__(self, parent=None) -> None:
@@ -291,18 +294,20 @@ class ExperimentSetupView(QScrollArea):
         root.setSpacing(16)
 
         # ── 顶部标题栏 ───────────────────────────────────────────────────────
+        # ?? ????? ???????????????????????????????????????????????????????
         title_row = QHBoxLayout()
-        page_title = QLabel("实验设置")
-        page_title.setStyleSheet(
+        self.page_title = QLabel("实验设置")
+        self.page_title.setStyleSheet(
             f"color: {PALETTE['text_primary']}; font-size: 22px; font-weight: 700;"
             " letter-spacing: -0.3px;"
         )
-        alter_btn = QPushButton("修改数据")
-        alter_btn.setFixedHeight(32)
-        alter_btn.setStyleSheet(secondary_btn_style())
-        title_row.addWidget(page_title)
+        self.alter_btn = QPushButton("修改数据")
+        self.alter_btn.setFixedHeight(32)
+        self.alter_btn.setStyleSheet(secondary_btn_style())
+        self.alter_btn.clicked.connect(self.edit_requested.emit)
+        title_row.addWidget(self.page_title)
         title_row.addStretch()
-        title_row.addWidget(alter_btn)
+        title_row.addWidget(self.alter_btn)
         title_row.addSpacing(6)
         title_row.addWidget(_help_btn())
         root.addLayout(title_row)
@@ -568,6 +573,29 @@ class ExperimentSetupView(QScrollArea):
 
         right_col.addStretch()
 
+        self._editable_widgets = [
+            self.cmb_target,
+            self.chk_histag,
+            self.edit_target_stock,
+            self.cmb_target_unit,
+            self.edit_target_assay,
+            self.cmb_buffer,
+            self.cmb_capillary,
+            self.cmb_ligand,
+            self.edit_kd,
+            self.cmb_kd_unit,
+            self.edit_lig_stock,
+            self.cmb_lig_unit,
+            self.chk_dmso,
+            self.edit_hi_conc,
+        ]
+        self._system_widgets = [
+            self.chk_auto,
+            self.spin_excitation,
+            self.cmb_mst,
+        ]
+        self.set_plan_lock_state(locked=False, allow_plan_edit=True)
+
         two_col.addLayout(left_col, 1)
         two_col.addLayout(right_col, 1)
         root.addLayout(two_col)
@@ -587,6 +615,19 @@ class ExperimentSetupView(QScrollArea):
             combo.setCurrentIndex(idx)
         elif combo.isEditable():
             combo.setEditText(text)
+
+    def set_fields_enabled(self, widgets: list[QWidget], enabled: bool) -> None:
+        for widget in widgets:
+            widget.setEnabled(enabled)
+            if isinstance(widget, QLineEdit):
+                widget.setReadOnly(not enabled)
+                widget.setStyleSheet(_input_style() if enabled else _input_readonly_style())
+
+    def set_plan_lock_state(self, *, locked: bool, allow_plan_edit: bool) -> None:
+        plan_enabled = (not locked) or allow_plan_edit
+        self.set_fields_enabled(self._editable_widgets, plan_enabled)
+        self.set_fields_enabled(self._system_widgets, False if locked else True)
+        self.alter_btn.setEnabled(locked)
 
     def set_data(self, data: dict) -> None:
         """按实验快照/存档回填设置页，保证每个实验互相独立。"""
