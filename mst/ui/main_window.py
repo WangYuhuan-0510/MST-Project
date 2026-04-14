@@ -252,6 +252,42 @@ class MainWindow(QMainWindow):
             self._sync_current_session_state()
             self._mark_dirty(self.current_experiment_id, True)
 
+    def _refresh_single_sidebar_experiment(self, experiment_id: str) -> bool:
+        exp_id = str(experiment_id or "").strip()
+        if not exp_id or self.project_view is None or self.current_project_dir is None:
+            return False
+        h5_path = self._experiment_h5_path(exp_id)
+        if h5_path is None or not h5_path.exists():
+            return False
+
+        exp = Experiment.load_h5(h5_path)
+        exp_name = str(self._experiment_display_name_by_id.get(exp_id) or exp.metadata.get("display_name") or exp.name or h5_path.parent.name)
+        self._experiment_display_name_by_id[exp_id] = exp_name
+        state = self._ensure_session_state(exp_id, display_name=exp_name)
+        status = self._experiment_status_by_id.get(exp.id, self._experiment_status_by_id.get(exp_id, state.lifecycle_status))
+        exp_type_id = normalize_experiment_type_id(
+            str(exp.metadata.get("experiment_type_id") or exp.metadata.get("experiment_type") or state.experiment_type_id or "pre_test")
+        )
+        exp_type_name = str(
+            exp.metadata.get("experiment_type") or state.experiment_type_name or get_experiment_type_config(exp_type_id).get("name") or "Pre-test"
+        )
+        state.experiment_type_id = exp_type_id
+        state.experiment_type_name = exp_type_name
+        state.excitation = str(exp.metadata.get("excitation") or state.excitation or "RED")
+        metadata_order = int(str(exp.metadata.get("experiment_order") or "0") or "0")
+        order_index = self._get_or_assign_experiment_order(exp_id, metadata_order)
+        updated = self.project_view.sidebar.update_experiment_item(
+            exp_id,
+            name=exp_name,
+            status=status,
+            experiment_type_id=exp_type_id,
+            experiment_type_name=exp_type_name,
+            order_index=order_index,
+        )
+        if updated:
+            self._select_sidebar_experiment(self.current_experiment_id or self._pending_new_experiment_id)
+        return updated
+
     def _default_display_name(self, experiment_id: str) -> str:
         order = self._get_or_assign_experiment_order(experiment_id)
         return f"E{order:02d}"
@@ -268,6 +304,10 @@ class MainWindow(QMainWindow):
 
         def remember(*_args) -> None:
             self._capture_current_plan_snapshot()
+            if self.current_experiment_id:
+                self._save_experiment_by_id(self.current_experiment_id)
+                if not self._refresh_single_sidebar_experiment(self.current_experiment_id):
+                    self._refresh_sidebar_experiments()
 
         watched_widgets = [
             "cmb_target",
@@ -625,6 +665,7 @@ class MainWindow(QMainWindow):
             self._set_base_window_title_for_path(self.current_experiment_path)
 
         if self.current_experiment_id:
+            self._save_experiment_by_id(self.current_experiment_id)
             state = self._ensure_session_state(
                 self.current_experiment_id,
                 display_name=self._experiment_display_name_by_id.get(self.current_experiment_id, self._default_display_name(self.current_experiment_id)),
@@ -633,7 +674,7 @@ class MainWindow(QMainWindow):
             state.experiment_type_id = self.current_experiment_type_id
             state.experiment_type_name = self.current_experiment_type
             state.lifecycle_status = "draft"
-            state.is_dirty = True
+            state.is_dirty = False
 
         self._refresh_sidebar_experiments()
         self._select_sidebar_experiment(self.current_experiment_id)

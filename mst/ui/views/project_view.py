@@ -320,6 +320,41 @@ class Sidebar(QWidget):
         if self._exp_buttons:
             self._exp_buttons[0].setChecked(True)
 
+    def update_experiment_item(
+        self,
+        experiment_id: str,
+        *,
+        name: str,
+        status: str,
+        experiment_type_id: str,
+        experiment_type_name: str,
+        order_index: int,
+    ) -> bool:
+        wanted = str(experiment_id or "").strip()
+        for old_btn in self._exp_buttons:
+            if old_btn.experiment_id != wanted:
+                continue
+            replacement = ExperimentItem(
+                name,
+                status,
+                experiment_id=wanted,
+                experiment_type_id=experiment_type_id,
+                experiment_type_name=experiment_type_name,
+                order_index=order_index,
+            )
+            replacement.clicked.connect(lambda _, b=replacement: self._select_exp(b))
+            replacement.rename_requested.connect(self.experiment_rename_requested.emit)
+            replacement.delete_requested.connect(self.experiment_delete_requested.emit)
+            replacement.setChecked(old_btn.isChecked())
+            index = self._exp_layout.indexOf(old_btn)
+            if index < 0:
+                return False
+            self._exp_layout.insertWidget(index, replacement)
+            self._exp_buttons[self._exp_buttons.index(old_btn)] = replacement
+            old_btn.deleteLater()
+            return True
+        return False
+
     def select_experiment(self, experiment_id: str) -> None:
         wanted = str(experiment_id or "").strip()
         for btn in self._exp_buttons:
