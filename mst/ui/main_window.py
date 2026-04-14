@@ -12,8 +12,14 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+import shutil
 
 from PySide6.QtWidgets import QMainWindow, QStackedWidget, QMessageBox
+
+
+_EDIT_UNLOCK_TITLE = "修改数据确认"
+_EDIT_UNLOCK_TEXT = "修改 Plan 数据将重新标记当前实验为未保存状态，是否继续？"
+
 
 from mst.core.app_state import AppState
 from mst.core.data_manager import DataManager
@@ -53,6 +59,7 @@ class MainWindow(QMainWindow):
         self._experiment_status_by_id: dict[str, str] = {}
         self._experiment_order_by_id: dict[str, int] = {}
         self._next_experiment_order: int = 1
+        self._pending_new_experiment_id: str | None = None
         self._plan_snapshot_by_experiment_key: dict[str, dict] = {}
         self._experiment_display_name_by_id: dict[str, str] = {}
         self._session_state_by_experiment_id: dict[str, ExperimentSessionState] = {}
@@ -65,6 +72,7 @@ class MainWindow(QMainWindow):
         # index 0 — 欢迎页
         self.welcome_view = WelcomeView()
         self.welcome_view.session_opened.connect(self._on_session_opened)
+        self.welcome_view.new_experiment_requested.connect(self._on_new_experiment_requested)
         self._stack.addWidget(self.welcome_view)
 
         # index 1 — 向导
@@ -172,6 +180,15 @@ class MainWindow(QMainWindow):
         state = self._ensure_session_state(self.current_experiment_id)
         if state.lifecycle_status == "draft":
             return
+        answer = QMessageBox.question(
+            self,
+            _EDIT_UNLOCK_TITLE,
+            _EDIT_UNLOCK_TEXT,
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
         setup_view = self.project_view.content.stack.widget(0)
         if hasattr(setup_view, "set_plan_lock_state"):
             setup_view.set_plan_lock_state(locked=True, allow_plan_edit=True)
@@ -229,11 +246,20 @@ class MainWindow(QMainWindow):
             self.state.current_session.setup_data = dict(snapshot)
             state = self._ensure_session_state(
                 self.current_experiment_id,
-                display_name=self._experiment_display_name_by_id.get(self.current_experiment_id, "experiment"),
+                display_name=self._experiment_display_name_by_id.get(self.current_experiment_id, self._default_display_name(self.current_experiment_id)),
             )
             state.plan_snapshot = dict(snapshot)
             self._sync_current_session_state()
             self._mark_dirty(self.current_experiment_id, True)
+
+    def _default_display_name(self, experiment_id: str) -> str:
+        order = self._get_or_assign_experiment_order(experiment_id)
+        return f"E{order:02d}"
+
+    def _select_sidebar_experiment(self, experiment_id: str | None) -> None:
+        if self.project_view is None:
+            return
+        self.project_view.select_experiment(str(experiment_id or ""))
 
     def _bind_plan_autosave(self) -> None:
         if self.project_view is None:
@@ -314,8 +340,7 @@ class MainWindow(QMainWindow):
             (exp_id, exp_name, status, exp_type_id, exp_type_name, order_index)
             for order_index, exp_id, exp_name, status, exp_type_id, exp_type_name in experiments
         ])
-        if self.current_experiment_id:
-            self.project_view.select_experiment(self.current_experiment_id)
+        self._select_sidebar_experiment(self.current_experiment_id or self._pending_new_experiment_id)
 
     def _save_experiment_by_id(self, experiment_id: str) -> bool:
         exp_id = str(experiment_id or "").strip()
@@ -349,7 +374,7 @@ class MainWindow(QMainWindow):
                 str(loaded.metadata.get("experiment_type_id") or loaded.metadata.get("experiment_type") or exp_type_id)
             )
             exp_type_name = str(loaded.metadata.get("experiment_type") or get_experiment_type_config(exp_type_id).get("name") or exp_type_name)
-        display_name = self._experiment_display_name_by_id.get(exp_id, h5_path.parent.name)
+        display_name = self._experiment_display_name_by_id.get(exp_id, self._default_display_name(exp_id))
 
         exp = Experiment.from_ui(
             name=display_name,
@@ -482,21 +507,31 @@ class MainWindow(QMainWindow):
             if remaining:
                 self._load_experiment_from_id(remaining[0])
 
-    def _prepare_new_experiment_session(self) -> bool:
+    def _prepare_new_experiment_session(self, target_path: str | None = None) -> bool:
+        if target_path:
+            target_h5 = Path(target_path)
+            self.current_project_dir = target_h5.parent
+            self.current_experiment_path = str(target_h5)
         if self.current_project_dir is None:
             QMessageBox.warning(self, "新建实验失败", "未选择实验项目目录")
             return False
 
-        self.current_experiment_id = Experiment().id
-        self._get_or_assign_experiment_order(self.current_experiment_id)
-        exp_dir = self.current_project_dir / self.current_experiment_id
-        self.current_experiment_path = str(exp_dir / "experiment.h5")
-        self._experiment_status_by_id[self.current_experiment_id] = "draft"
-        self._experiment_display_name_by_id[self.current_experiment_id] = "experiment"
+        self._pending_new_experiment_id = Experiment().id
+        self._get_or_assign_experiment_order(self._pending_new_experiment_id)
+        new_exp_dir = self.current_project_dir / self._pending_new_experiment_id
+        if target_path:
+            target_h5 = Path(target_path)
+            self.current_project_dir = target_h5.parent
+            self.current_experiment_path = str(target_h5)
+        else:
+            self.current_experiment_path = str(new_exp_dir / "experiment.h5")
+        default_name = self._default_display_name(self._pending_new_experiment_id)
+        self._experiment_status_by_id[self._pending_new_experiment_id] = "draft"
+        self._experiment_display_name_by_id[self._pending_new_experiment_id] = default_name
 
         state = ExperimentSessionState(
-            experiment_id=self.current_experiment_id,
-            display_name="experiment",
+            experiment_id=self._pending_new_experiment_id,
+            display_name=default_name,
             excitation="RED",
             experiment_type_id="pre_test",
             experiment_type_name="Pre-test",
@@ -504,7 +539,9 @@ class MainWindow(QMainWindow):
             is_dirty=True,
             lifecycle_status="draft",
         )
-        self._session_state_by_experiment_id[self.current_experiment_id] = state
+        self._session_state_by_experiment_id[self._pending_new_experiment_id] = state
+        self.current_experiment_id = self._pending_new_experiment_id
+        self._experiment_display_name_by_id[self.current_experiment_id] = default_name
         self.current_excitation = state.excitation
         self.current_experiment_type_id = state.experiment_type_id
         self.current_experiment_type = state.experiment_type_name
@@ -517,9 +554,10 @@ class MainWindow(QMainWindow):
     # ── Slots ─────────────────────────────────────────────────────────────
 
     def _on_session_opened(self, experiment_path: str) -> None:
-        """欢迎页打开实验会话"""
+        """欢迎页打开已有实验，直接进入主界面"""
         self.current_project_dir = Path(experiment_path).parent
         self.current_experiment_path = experiment_path
+        self._pending_new_experiment_id = None
         loaded = Experiment.load_h5(experiment_path)
         self.current_experiment_id = loaded.id
         self._get_or_assign_experiment_order(self.current_experiment_id)
@@ -538,13 +576,27 @@ class MainWindow(QMainWindow):
         state.excitation = self.current_excitation
         state.experiment_type_id = self.current_experiment_type_id
         state.experiment_type_name = self.current_experiment_type
+        pv = self._ensure_project_view()
+        self._stack.setCurrentIndex(2)
+        self._load_experiment_into_ui(experiment_path, pv)
+        self._select_sidebar_experiment(self.current_experiment_id)
+
+    def _on_new_experiment_requested(self, experiment_path: str) -> None:
+        if not self._prepare_new_experiment_session(experiment_path):
+            return
         self.wizard.reset()
+        self._refresh_sidebar_experiments()
+        self._select_sidebar_experiment(self._pending_new_experiment_id)
         self._stack.setCurrentIndex(1)
 
     def _on_wizard_completed(self, excitation: str, experiment_type_id: str) -> None:
         """实验向导配置完成"""
         self.current_excitation = excitation
         self.current_experiment_type_id = normalize_experiment_type_id(experiment_type_id)
+
+        if not self._pending_new_experiment_id or not self.current_experiment_id:
+            QMessageBox.warning(self, "新建实验失败", "未找到待创建的实验会话")
+            return
 
         type_items = list_experiment_types()
         name_by_id = {t.get("id"): t.get("name", "") for t in type_items}
@@ -575,7 +627,7 @@ class MainWindow(QMainWindow):
         if self.current_experiment_id:
             state = self._ensure_session_state(
                 self.current_experiment_id,
-                display_name=self._experiment_display_name_by_id.get(self.current_experiment_id, "experiment"),
+                display_name=self._experiment_display_name_by_id.get(self.current_experiment_id, self._default_display_name(self.current_experiment_id)),
             )
             state.excitation = self.current_excitation
             state.experiment_type_id = self.current_experiment_type_id
@@ -583,8 +635,9 @@ class MainWindow(QMainWindow):
             state.lifecycle_status = "draft"
             state.is_dirty = True
 
-        self._stack.setCurrentIndex(2)
         self._refresh_sidebar_experiments()
+        self._select_sidebar_experiment(self.current_experiment_id)
+        self._stack.setCurrentIndex(2)
 
         path = self.current_experiment_path
         should_reload_saved_experiment = bool(path and Path(path).exists() and self.current_experiment_id and self.current_experiment_id in self._session_state_by_experiment_id and self._session_state_by_experiment_id[self.current_experiment_id].plan_snapshot)
@@ -601,11 +654,14 @@ class MainWindow(QMainWindow):
                     **dict(self.state.current_session.setup_data or {}),
                 })
 
+        self._pending_new_experiment_id = None
+
     def _go_welcome(self) -> None:
         """返回欢迎页"""
         self.current_project_dir = None
         self.current_experiment_id = None
         self.current_experiment_path = None
+        self._pending_new_experiment_id = None
         self._set_base_window_title_for_path(None)
         self._stack.setCurrentIndex(0)
         self.welcome_view._populate_recent()
@@ -645,8 +701,7 @@ class MainWindow(QMainWindow):
 
         self.wizard.reset()
         self._refresh_sidebar_experiments()
-        if self.project_view is not None:
-            self.project_view.select_experiment(self.current_experiment_id or "")
+        self._select_sidebar_experiment(self._pending_new_experiment_id)
         self._stack.setCurrentIndex(1)
 
     def _load_experiment_into_ui(self, path: str, pv: ProjectView) -> None:

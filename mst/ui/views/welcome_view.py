@@ -16,7 +16,6 @@ from PySide6.QtWidgets import (
     QPushButton, QFrame, QFileDialog, QSizePolicy,
 )
 
-from mst.core.experiments import Experiment
 from .ui_style import PALETTE
 
 _ORG = "SUAN-Lab"
@@ -164,6 +163,7 @@ class _RecentRow(QPushButton):
 
 class WelcomeView(QWidget):
     session_opened = Signal(str)
+    new_experiment_requested = Signal(str)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -272,12 +272,8 @@ class WelcomeView(QWidget):
         if exp_path.suffix.lower() != ".h5":
             exp_path = exp_path.with_suffix(".h5")
 
-        # 创建一个最小可用的 experiment.h5
-        Experiment(name=exp_path.stem).save_h5(exp_path)
-
-        _save_recent(str(exp_path))
-        self._populate_recent()
-        self.session_opened.emit(str(exp_path))
+        # 仅选择新实验保存位置，不预创建 h5 文件
+        self.new_experiment_requested.emit(str(exp_path))
 
     def _on_open(self):
         self.setEnabled(False)
