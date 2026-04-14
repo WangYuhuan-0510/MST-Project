@@ -511,6 +511,17 @@ class MainWindow(QMainWindow):
         if not exp_id or self.current_project_dir is None:
             return
 
+        display_name = self._experiment_display_name_by_id.get(exp_id, self._default_display_name(exp_id))
+        answer = QMessageBox.question(
+            self,
+            "删除实验确认",
+            f"确定要删除实验“{display_name}”吗？\n此操作将删除对应实验文件，且不可撤销。",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        )
+        if answer != QMessageBox.Yes:
+            return
+
         exp_dir = self._experiment_dir(exp_id)
         if exp_dir is None or not exp_dir.exists():
             return
