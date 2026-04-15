@@ -19,6 +19,7 @@ from PySide6.QtWidgets import QMainWindow, QStackedWidget, QMessageBox
 
 _EDIT_UNLOCK_TITLE = "修改数据确认"
 _EDIT_UNLOCK_TEXT = "修改 Plan 数据将重新标记当前实验为未保存状态，是否继续？"
+_UNSAVED_EXPERIMENTS_TITLE = "存在未保存实验"
 
 
 from mst.core.app_state import AppState
@@ -219,7 +220,13 @@ class MainWindow(QMainWindow):
             return str(Path(path).parent.name).strip()
         return str(experiment_id or "").strip()
 
-    def _get_or_assign_experiment_order(self, experiment_id: str, preferred_order: int | None = None) -> int:
+    def _get_assigned_experiment_order(self, experiment_id: str) -> int | None:
+        exp_id = str(experiment_id or "").strip()
+        if not exp_id:
+            return None
+        return self._experiment_order_by_id.get(exp_id)
+
+    def _assign_experiment_order(self, experiment_id: str, preferred_order: int | None = None) -> int:
         exp_id = str(experiment_id or "").strip()
         if not exp_id:
             return 0
@@ -228,12 +235,41 @@ class MainWindow(QMainWindow):
 
         order = int(preferred_order or 0)
         if order > 0 and order not in self._experiment_order_by_id.values():
-            self._experiment_order_by_id[exp_id] = order
-            self._next_experiment_order = max(self._next_experiment_order, order + 1)
+            assigned_order = order
         else:
-            self._experiment_order_by_id[exp_id] = self._next_experiment_order
-            self._next_experiment_order += 1
-        return self._experiment_order_by_id[exp_id]
+            assigned_order = self._next_experiment_order
+        self._experiment_order_by_id[exp_id] = assigned_order
+        self._next_experiment_order = max(self._next_experiment_order, assigned_order + 1)
+        return assigned_order
+
+    def _sync_order_from_saved_experiment(self, experiment_id: str, metadata_order: int | None = None) -> int:
+        exp_id = str(experiment_id or "").strip()
+        if not exp_id:
+            return 0
+        assigned_order = self._get_assigned_experiment_order(exp_id)
+        if assigned_order is not None:
+            if metadata_order and metadata_order > 0:
+                self._next_experiment_order = max(self._next_experiment_order, int(metadata_order) + 1)
+            return assigned_order
+        if metadata_order and int(metadata_order) > 0:
+            return self._assign_experiment_order(exp_id, int(metadata_order))
+        return self._assign_experiment_order(exp_id)
+
+    def _display_name_for_order(self, order: int) -> str:
+        safe_order = max(1, int(order or 1))
+        return f"E{safe_order:02d}"
+
+    def _get_display_name(self, experiment_id: str) -> str:
+        exp_id = str(experiment_id or "").strip()
+        cached_name = str(self._experiment_display_name_by_id.get(exp_id) or "").strip()
+        if cached_name:
+            return cached_name
+        order = self._get_assigned_experiment_order(exp_id)
+        if order is None:
+            return "experiment"
+        display_name = self._display_name_for_order(order)
+        self._experiment_display_name_by_id[exp_id] = display_name
+        return display_name
 
     def _capture_current_plan_snapshot(self) -> None:
         if self.project_view is None or not self.current_experiment_id:
@@ -246,7 +282,7 @@ class MainWindow(QMainWindow):
             self.state.current_session.setup_data = dict(snapshot)
             state = self._ensure_session_state(
                 self.current_experiment_id,
-                display_name=self._experiment_display_name_by_id.get(self.current_experiment_id, self._default_display_name(self.current_experiment_id)),
+                display_name=self._get_display_name(self.current_experiment_id),
             )
             state.plan_snapshot = dict(snapshot)
             self._sync_current_session_state()
@@ -261,7 +297,7 @@ class MainWindow(QMainWindow):
             return False
 
         exp = Experiment.load_h5(h5_path)
-        exp_name = str(self._experiment_display_name_by_id.get(exp_id) or exp.metadata.get("display_name") or exp.name or h5_path.parent.name)
+        exp_name = str(self._experiment_display_name_by_id.get(exp_id) or exp.metadata.get("display_name") or exp.name or self._get_display_name(exp_id) or h5_path.parent.name)
         self._experiment_display_name_by_id[exp_id] = exp_name
         state = self._ensure_session_state(exp_id, display_name=exp_name)
         status = self._experiment_status_by_id.get(exp.id, self._experiment_status_by_id.get(exp_id, state.lifecycle_status))
@@ -275,7 +311,7 @@ class MainWindow(QMainWindow):
         state.experiment_type_name = exp_type_name
         state.excitation = str(exp.metadata.get("excitation") or state.excitation or "RED")
         metadata_order = int(str(exp.metadata.get("experiment_order") or "0") or "0")
-        order_index = self._get_or_assign_experiment_order(exp_id, metadata_order)
+        order_index = self._sync_order_from_saved_experiment(exp_id, metadata_order)
         updated = self.project_view.sidebar.update_experiment_item(
             exp_id,
             name=exp_name,
@@ -289,8 +325,7 @@ class MainWindow(QMainWindow):
         return updated
 
     def _default_display_name(self, experiment_id: str) -> str:
-        order = self._get_or_assign_experiment_order(experiment_id)
-        return f"E{order:02d}"
+        return self._get_display_name(experiment_id)
 
     def _select_sidebar_experiment(self, experiment_id: str | None) -> None:
         if self.project_view is None:
@@ -346,11 +381,12 @@ class MainWindow(QMainWindow):
             setup_view.edit_requested.connect(self._unlock_plan_for_current_experiment)
 
 
-    def _refresh_sidebar_experiments(self) -> None:
-        if self.project_view is None or self.current_project_dir is None:
-            return
+    def _build_sidebar_experiments(self) -> list[tuple[str, str, str, str, str, int]]:
+        if self.current_project_dir is None:
+            return []
 
-        experiments: list[tuple[int, str, str, str, str, str]] = []
+        experiments: list[tuple[str, str, str, str, str, int]] = []
+        persisted_ids: set[str] = set()
         children = [child for child in self.current_project_dir.iterdir() if child.is_dir()]
         for child in children:
             h5_path = child / "experiment.h5"
@@ -358,7 +394,10 @@ class MainWindow(QMainWindow):
                 continue
             exp = Experiment.load_h5(h5_path)
             exp_id = str(child.name).strip()
-            exp_name = str(self._experiment_display_name_by_id.get(exp_id) or exp.metadata.get("display_name") or exp.name or child.name)
+            persisted_ids.add(exp_id)
+            metadata_order = int(str(exp.metadata.get("experiment_order") or "0") or "0")
+            order_index = self._sync_order_from_saved_experiment(exp_id, metadata_order)
+            exp_name = str(self._experiment_display_name_by_id.get(exp_id) or exp.metadata.get("display_name") or exp.name or self._display_name_for_order(order_index))
             self._experiment_display_name_by_id[exp_id] = exp_name
             state = self._ensure_session_state(exp_id, display_name=exp_name)
             status = self._experiment_status_by_id.get(exp.id, self._experiment_status_by_id.get(exp_id, state.lifecycle_status))
@@ -371,15 +410,31 @@ class MainWindow(QMainWindow):
             state.experiment_type_id = exp_type_id
             state.experiment_type_name = exp_type_name
             state.excitation = str(exp.metadata.get("excitation") or state.excitation or "RED")
-            metadata_order = int(str(exp.metadata.get("experiment_order") or "0") or "0")
-            order_index = self._get_or_assign_experiment_order(exp_id, metadata_order)
-            experiments.append((order_index, exp_id, exp_name, status, exp_type_id, exp_type_name))
+            experiments.append((exp_id, exp_name, status, exp_type_id, exp_type_name, order_index))
 
-        experiments.sort(key=lambda item: item[0])
-        self.project_view.set_experiments([
-            (exp_id, exp_name, status, exp_type_id, exp_type_name, order_index)
-            for order_index, exp_id, exp_name, status, exp_type_id, exp_type_name in experiments
-        ])
+        pending_id = str(self._pending_new_experiment_id or "").strip()
+        if pending_id and pending_id not in persisted_ids:
+            state = self._ensure_session_state(pending_id, display_name=self._get_display_name(pending_id))
+            order_index = self._get_assigned_experiment_order(pending_id) or self._assign_experiment_order(pending_id)
+            display_name = str(state.display_name or self._display_name_for_order(order_index))
+            self._experiment_display_name_by_id[pending_id] = display_name
+            experiments.append((
+                pending_id,
+                display_name,
+                self._experiment_status_by_id.get(pending_id, "draft"),
+                state.experiment_type_id,
+                state.experiment_type_name,
+                order_index,
+            ))
+
+        experiments.sort(key=lambda item: item[5])
+        return experiments
+
+    def _refresh_sidebar_experiments(self) -> None:
+        if self.project_view is None or self.current_project_dir is None:
+            return
+
+        self.project_view.set_experiments(self._build_sidebar_experiments())
         self._select_sidebar_experiment(self.current_experiment_id or self._pending_new_experiment_id)
 
     def _save_experiment_by_id(self, experiment_id: str) -> bool:
@@ -414,7 +469,7 @@ class MainWindow(QMainWindow):
                 str(loaded.metadata.get("experiment_type_id") or loaded.metadata.get("experiment_type") or exp_type_id)
             )
             exp_type_name = str(loaded.metadata.get("experiment_type") or get_experiment_type_config(exp_type_id).get("name") or exp_type_name)
-        display_name = self._experiment_display_name_by_id.get(exp_id, self._default_display_name(exp_id))
+        display_name = self._experiment_display_name_by_id.get(exp_id, self._get_display_name(exp_id))
 
         exp = Experiment.from_ui(
             name=display_name,
@@ -424,7 +479,10 @@ class MainWindow(QMainWindow):
             experiment_type_id=exp_type_id,
             experiment_id=exp_id,
         )
-        exp.metadata["experiment_order"] = str(self._get_or_assign_experiment_order(exp_id))
+        assigned_order = self._get_assigned_experiment_order(exp_id)
+        if assigned_order is None:
+            assigned_order = self._assign_experiment_order(exp_id)
+        exp.metadata["experiment_order"] = str(assigned_order)
 
         if exp_id == (self.current_experiment_id or ""):
             exp.capture_from_run_view(run_view)
@@ -511,7 +569,7 @@ class MainWindow(QMainWindow):
         if not exp_id or self.current_project_dir is None:
             return
 
-        display_name = self._experiment_display_name_by_id.get(exp_id, self._default_display_name(exp_id))
+        display_name = self._get_display_name(exp_id)
         answer = QMessageBox.question(
             self,
             "删除实验确认",
@@ -558,6 +616,14 @@ class MainWindow(QMainWindow):
             if remaining:
                 self._load_experiment_from_id(remaining[0])
 
+    def _requested_experiment_path(self) -> Path | None:
+        if not self.current_experiment_path:
+            return None
+        path = Path(self.current_experiment_path)
+        if path.suffix.lower() == ".h5":
+            return path
+        return path / "experiment.h5"
+
     def _prepare_new_experiment_session(self, target_path: str | None = None) -> bool:
         if target_path:
             target_h5 = Path(target_path)
@@ -568,7 +634,7 @@ class MainWindow(QMainWindow):
             return False
 
         self._pending_new_experiment_id = Experiment().id
-        self._get_or_assign_experiment_order(self._pending_new_experiment_id)
+        assigned_order = self._assign_experiment_order(self._pending_new_experiment_id)
         new_exp_dir = self.current_project_dir / self._pending_new_experiment_id
         if target_path:
             target_h5 = Path(target_path)
@@ -576,7 +642,7 @@ class MainWindow(QMainWindow):
             self.current_experiment_path = str(target_h5)
         else:
             self.current_experiment_path = str(new_exp_dir / "experiment.h5")
-        default_name = self._default_display_name(self._pending_new_experiment_id)
+        default_name = self._display_name_for_order(assigned_order)
         self._experiment_status_by_id[self._pending_new_experiment_id] = "draft"
         self._experiment_display_name_by_id[self._pending_new_experiment_id] = default_name
 
@@ -606,12 +672,13 @@ class MainWindow(QMainWindow):
 
     def _on_session_opened(self, experiment_path: str) -> None:
         """欢迎页打开已有实验，直接进入主界面"""
-        self.current_project_dir = Path(experiment_path).parent
+        self.current_project_dir = Path(experiment_path).parent.parent
         self.current_experiment_path = experiment_path
         self._pending_new_experiment_id = None
         loaded = Experiment.load_h5(experiment_path)
         self.current_experiment_id = loaded.id
-        self._get_or_assign_experiment_order(self.current_experiment_id)
+        metadata_order = int(str(loaded.metadata.get("experiment_order") or "0") or "0")
+        self._sync_order_from_saved_experiment(self.current_experiment_id, metadata_order)
         self._set_base_window_title_for_path(experiment_path)
         self.current_excitation = str(loaded.metadata.get("excitation") or self.current_excitation)
         self.current_experiment_type_id = normalize_experiment_type_id(
@@ -667,19 +734,27 @@ class MainWindow(QMainWindow):
 
         if self.current_project_dir is not None and hasattr(run_view, "data_manager"):
             dm: DataManager = run_view.data_manager
-            dm.bind_experiment_by_id(
-                self.current_experiment_id or "",
-                project_dir=self.current_project_dir,
-                name=Path(self.current_experiment_path or "experiment.h5").stem,
-            )
-            self.current_experiment_path = dm.current_h5_path
+            requested_h5 = self._requested_experiment_path()
+            if requested_h5 is not None:
+                dm.bind_experiment_by_id(
+                    self.current_experiment_id or "",
+                    project_dir=requested_h5.parent,
+                    name=requested_h5.stem,
+                )
+                self.current_experiment_path = str(requested_h5)
+            else:
+                dm.bind_experiment_by_id(
+                    self.current_experiment_id or "",
+                    project_dir=self.current_project_dir,
+                    name=Path(self.current_experiment_path or "experiment.h5").stem,
+                )
             self._set_base_window_title_for_path(self.current_experiment_path)
 
         if self.current_experiment_id:
             self._save_experiment_by_id(self.current_experiment_id)
             state = self._ensure_session_state(
                 self.current_experiment_id,
-                display_name=self._experiment_display_name_by_id.get(self.current_experiment_id, self._default_display_name(self.current_experiment_id)),
+                display_name=self._get_display_name(self.current_experiment_id),
             )
             state.excitation = self.current_excitation
             state.experiment_type_id = self.current_experiment_type_id
@@ -708,8 +783,37 @@ class MainWindow(QMainWindow):
 
         self._pending_new_experiment_id = None
 
+    def _confirm_close_with_unsaved_experiments(self) -> bool:
+        dirty_states = [state for state in self._session_state_by_experiment_id.values() if state.is_dirty]
+        if not dirty_states:
+            return True
+
+        dirty_names = [state.display_name or self._default_display_name(state.experiment_id) for state in dirty_states]
+        dirty_list = "\n".join(f"• {name}" for name in dirty_names)
+        answer = QMessageBox.question(
+            self,
+            _UNSAVED_EXPERIMENTS_TITLE,
+            f"检测到以下实验尚未保存：\n{dirty_list}\n\n是否先保存后再关闭？",
+            QMessageBox.Yes | QMessageBox.No | QMessageBox.Cancel,
+            QMessageBox.Yes,
+        )
+        if answer == QMessageBox.Cancel:
+            return False
+        if answer == QMessageBox.Yes:
+            self._on_save()
+            return not self._any_dirty()
+        return True
+
+    def closeEvent(self, event) -> None:
+        if not self._confirm_close_with_unsaved_experiments():
+            event.ignore()
+            return
+        super().closeEvent(event)
+
     def _go_welcome(self) -> None:
         """返回欢迎页"""
+        if not self._confirm_close_with_unsaved_experiments():
+            return
         self.current_project_dir = None
         self.current_experiment_id = None
         self.current_experiment_path = None
@@ -775,7 +879,8 @@ class MainWindow(QMainWindow):
             self.state.current_session.experiment_type_id = loaded_type_id
             self.state.current_session.setup_data = dict(exp.setup_data or {})
             self.current_experiment_id = str(Path(path).parent.name)
-            self._get_or_assign_experiment_order(self.current_experiment_id)
+            metadata_order = int(str(exp.metadata.get("experiment_order") or "0") or "0")
+            self._sync_order_from_saved_experiment(self.current_experiment_id, metadata_order)
             display_name = str(exp.metadata.get("display_name") or exp.name or Path(path).parent.name)
             self._experiment_display_name_by_id[self.current_experiment_id] = display_name
             state = self._ensure_session_state(self.current_experiment_id, display_name=display_name)
