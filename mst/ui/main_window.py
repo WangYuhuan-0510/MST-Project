@@ -355,9 +355,8 @@ class MainWindow(QMainWindow):
         def remember(*_args) -> None:
             if self._suspend_plan_autosave:
                 return
-            self._capture_current_plan_snapshot()
             if self.current_experiment_id:
-                self._save_experiment_by_id(self.current_experiment_id)
+                self._mark_dirty(self.current_experiment_id, True)
                 if not self._refresh_single_sidebar_experiment(self.current_experiment_id):
                     self._refresh_sidebar_experiments()
 
