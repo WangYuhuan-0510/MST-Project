@@ -25,6 +25,7 @@ class ExperimentItem(QPushButton):
         experiment_type_id: str | None = None,
         experiment_type_name: str | None = None,
         order_index: int = 1,
+        is_dirty: bool = False,
         parent=None,
     ):
         super().__init__(parent)
@@ -37,6 +38,7 @@ class ExperimentItem(QPushButton):
         if self.experiment_type_name.casefold() == "binding test":
             self.experiment_type_name = "binding check"
         self.order_index = max(1, int(order_index or 1))
+        self.is_dirty = bool(is_dirty)
         self.icon_path = Path(__file__).resolve().parent / "icons" / f"{self.experiment_type_id}.svg"
 
         self.setCheckable(True)
@@ -96,6 +98,16 @@ class ExperimentItem(QPushButton):
         status_dot.setStyleSheet(f"color: {dot_color}; font-size: 8px;")
         status_dot.setAttribute(Qt.WA_TransparentForMouseEvents)
 
+        dirty_mark = QLabel("*")
+        dirty_mark.setVisible(self.is_dirty)
+        dirty_mark.setStyleSheet(
+            f"color: {PALETTE['accent']};"
+            "font-size: 14px;"
+            "font-weight: 800;"
+            "padding: 0 1px;"
+        )
+        dirty_mark.setAttribute(Qt.WA_TransparentForMouseEvents)
+
         top_row.addWidget(order_badge, 0, Qt.AlignVCenter)
         top_row.addWidget(icon_holder, 0, Qt.AlignVCenter)
         top_row.addWidget(type_lbl, 1, Qt.AlignVCenter)
@@ -103,6 +115,7 @@ class ExperimentItem(QPushButton):
         top_right = QHBoxLayout()
         top_right.setContentsMargins(0, 0, 0, 0)
         top_right.setSpacing(6)
+        top_right.addWidget(dirty_mark, 0, Qt.AlignVCenter)
         top_right.addWidget(status_dot, 0, Qt.AlignVCenter)
 
         self.delete_btn = QPushButton("×")

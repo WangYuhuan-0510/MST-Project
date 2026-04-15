@@ -295,21 +295,22 @@ class Sidebar(QWidget):
         if selected.experiment_id:
             self.experiment_selected.emit(selected.experiment_id)
 
-    def set_experiments(self, experiments: list[tuple[str, str, str, str, str, int]]) -> None:
+    def set_experiments(self, experiments: list[object]) -> None:
         while self._exp_layout.count():
             item = self._exp_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
 
         self._exp_buttons = []
-        for experiment_id, name, status, experiment_type_id, experiment_type_name, order_index in experiments:
+        for item in experiments:
             btn = ExperimentItem(
-                name,
-                status,
-                experiment_id=experiment_id,
-                experiment_type_id=experiment_type_id,
-                experiment_type_name=experiment_type_name,
-                order_index=order_index,
+                item.display_name,
+                item.status,
+                experiment_id=item.experiment_id,
+                experiment_type_id=item.experiment_type_id,
+                experiment_type_name=item.experiment_type_name,
+                order_index=item.order_index,
+                is_dirty=getattr(item, "is_dirty", False),
             )
             btn.clicked.connect(lambda _, b=btn: self._select_exp(b))
             btn.rename_requested.connect(self.experiment_rename_requested.emit)
@@ -329,6 +330,7 @@ class Sidebar(QWidget):
         experiment_type_id: str,
         experiment_type_name: str,
         order_index: int,
+        is_dirty: bool = False,
     ) -> bool:
         wanted = str(experiment_id or "").strip()
         for old_btn in self._exp_buttons:
@@ -341,6 +343,7 @@ class Sidebar(QWidget):
                 experiment_type_id=experiment_type_id,
                 experiment_type_name=experiment_type_name,
                 order_index=order_index,
+                is_dirty=is_dirty,
             )
             replacement.clicked.connect(lambda _, b=replacement: self._select_exp(b))
             replacement.rename_requested.connect(self.experiment_rename_requested.emit)

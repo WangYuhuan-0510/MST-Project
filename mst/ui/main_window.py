@@ -43,6 +43,17 @@ class ExperimentSessionState:
     lifecycle_status: str = "draft"
 
 
+@dataclass
+class SidebarExperimentItemState:
+    experiment_id: str
+    display_name: str
+    status: str
+    experiment_type_id: str
+    experiment_type_name: str
+    order_index: int
+    is_dirty: bool = False
+
+
 class MainWindow(QMainWindow):
 
     def __init__(self, parent=None) -> None:
@@ -65,6 +76,7 @@ class MainWindow(QMainWindow):
         self._experiment_display_name_by_id: dict[str, str] = {}
         self._session_state_by_experiment_id: dict[str, ExperimentSessionState] = {}
         self._base_window_title = "PW-MST 实验控制平台"
+        self._suspend_plan_autosave = False
 
         # ── 堆叠页面 ──────────────────────────────────────────────────────
         self._stack = QStackedWidget(self)
@@ -165,6 +177,7 @@ class MainWindow(QMainWindow):
         state = self._ensure_session_state(exp_id)
         state.is_dirty = bool(dirty)
         self._refresh_window_title()
+        self._refresh_sidebar_experiments()
 
     def _apply_setup_lock_state(self) -> None:
         if self.project_view is None or not self.current_experiment_id:
@@ -271,7 +284,7 @@ class MainWindow(QMainWindow):
         self._experiment_display_name_by_id[exp_id] = display_name
         return display_name
 
-    def _capture_current_plan_snapshot(self) -> None:
+    def _capture_current_plan_snapshot(self, *, mark_dirty: bool = True) -> None:
         if self.project_view is None or not self.current_experiment_id:
             return
         setup_view = self.project_view.content.stack.widget(0)
@@ -286,7 +299,8 @@ class MainWindow(QMainWindow):
             )
             state.plan_snapshot = dict(snapshot)
             self._sync_current_session_state()
-            self._mark_dirty(self.current_experiment_id, True)
+            if mark_dirty:
+                self._mark_dirty(self.current_experiment_id, True)
 
     def _refresh_single_sidebar_experiment(self, experiment_id: str) -> bool:
         exp_id = str(experiment_id or "").strip()
@@ -319,6 +333,7 @@ class MainWindow(QMainWindow):
             experiment_type_id=exp_type_id,
             experiment_type_name=exp_type_name,
             order_index=order_index,
+            is_dirty=state.is_dirty,
         )
         if updated:
             self._select_sidebar_experiment(self.current_experiment_id or self._pending_new_experiment_id)
@@ -338,6 +353,8 @@ class MainWindow(QMainWindow):
         setup_view = self.project_view.content.stack.widget(0)
 
         def remember(*_args) -> None:
+            if self._suspend_plan_autosave:
+                return
             self._capture_current_plan_snapshot()
             if self.current_experiment_id:
                 self._save_experiment_by_id(self.current_experiment_id)
@@ -381,11 +398,11 @@ class MainWindow(QMainWindow):
             setup_view.edit_requested.connect(self._unlock_plan_for_current_experiment)
 
 
-    def _build_sidebar_experiments(self) -> list[tuple[str, str, str, str, str, int]]:
+    def _build_sidebar_experiments(self) -> list[SidebarExperimentItemState]:
         if self.current_project_dir is None:
             return []
 
-        experiments: list[tuple[str, str, str, str, str, int]] = []
+        experiments: list[SidebarExperimentItemState] = []
         persisted_ids: set[str] = set()
         children = [child for child in self.current_project_dir.iterdir() if child.is_dir()]
         for child in children:
@@ -410,7 +427,15 @@ class MainWindow(QMainWindow):
             state.experiment_type_id = exp_type_id
             state.experiment_type_name = exp_type_name
             state.excitation = str(exp.metadata.get("excitation") or state.excitation or "RED")
-            experiments.append((exp_id, exp_name, status, exp_type_id, exp_type_name, order_index))
+            experiments.append(SidebarExperimentItemState(
+                experiment_id=exp_id,
+                display_name=exp_name,
+                status=status,
+                experiment_type_id=exp_type_id,
+                experiment_type_name=exp_type_name,
+                order_index=order_index,
+                is_dirty=state.is_dirty,
+            ))
 
         pending_id = str(self._pending_new_experiment_id or "").strip()
         if pending_id and pending_id not in persisted_ids:
@@ -418,16 +443,17 @@ class MainWindow(QMainWindow):
             order_index = self._get_assigned_experiment_order(pending_id) or self._assign_experiment_order(pending_id)
             display_name = str(state.display_name or self._display_name_for_order(order_index))
             self._experiment_display_name_by_id[pending_id] = display_name
-            experiments.append((
-                pending_id,
-                display_name,
-                self._experiment_status_by_id.get(pending_id, "draft"),
-                state.experiment_type_id,
-                state.experiment_type_name,
-                order_index,
+            experiments.append(SidebarExperimentItemState(
+                experiment_id=pending_id,
+                display_name=display_name,
+                status=self._experiment_status_by_id.get(pending_id, "draft"),
+                experiment_type_id=state.experiment_type_id,
+                experiment_type_name=state.experiment_type_name,
+                order_index=order_index,
+                is_dirty=state.is_dirty,
             ))
 
-        experiments.sort(key=lambda item: item[5])
+        experiments.sort(key=lambda item: item.order_index)
         return experiments
 
     def _refresh_sidebar_experiments(self) -> None:
@@ -534,7 +560,7 @@ class MainWindow(QMainWindow):
         selected = str(experiment_id or "").strip()
         if not selected:
             return
-        self._capture_current_plan_snapshot()
+        self._capture_current_plan_snapshot(mark_dirty=False)
         if selected == (self.current_experiment_id or "") and self.current_experiment_path and Path(self.current_experiment_path).exists():
             return
         self._load_experiment_from_id(selected)
@@ -550,7 +576,7 @@ class MainWindow(QMainWindow):
             return
 
         exp = Experiment.load_h5(h5_path)
-        current_name = str(self._experiment_display_name_by_id.get(exp_id) or exp.metadata.get("display_name") or exp.name or "experiment")
+        current_name = self._get_display_name(exp_id)
         new_name, ok = self.project_view.prompt_rename(current_name)
         if not ok or not new_name:
             return
@@ -788,7 +814,7 @@ class MainWindow(QMainWindow):
         if not dirty_states:
             return True
 
-        dirty_names = [state.display_name or self._default_display_name(state.experiment_id) for state in dirty_states]
+        dirty_names = [state.display_name or self._get_display_name(state.experiment_id) for state in dirty_states]
         dirty_list = "\n".join(f"• {name}" for name in dirty_names)
         answer = QMessageBox.question(
             self,
@@ -861,6 +887,7 @@ class MainWindow(QMainWindow):
         self._stack.setCurrentIndex(1)
 
     def _load_experiment_into_ui(self, path: str, pv: ProjectView) -> None:
+        self._suspend_plan_autosave = True
         try:
             exp = Experiment.load_h5(path)
             setup_view = pv.content.stack.widget(0)
@@ -926,3 +953,5 @@ class MainWindow(QMainWindow):
             self._refresh_window_title()
         except Exception as e:
             QMessageBox.warning(self, "加载失败", f"实验数据加载失败，请检查文件完整性\n{e}")
+        finally:
+            self._suspend_plan_autosave = False
