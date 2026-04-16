@@ -25,6 +25,7 @@ from mst.core.instruction_rules import (
 from .ui_style import (
     PALETTE,
     secondary_btn_style,
+    primary_btn_style,
     label_style,
     divider,
 )
@@ -661,9 +662,10 @@ class ExperimentSetupView(QScrollArea):
         footer_row.addStretch()
 
         self.go_to_instructions_btn = QPushButton("Go to Instructions")
-        self.go_to_instructions_btn.setFixedHeight(36)
+        self.go_to_instructions_btn.setFixedHeight(40)
+        self.go_to_instructions_btn.setMinimumWidth(180)
         self.go_to_instructions_btn.setCursor(Qt.PointingHandCursor)
-        self.go_to_instructions_btn.setStyleSheet(secondary_btn_style())
+        self.go_to_instructions_btn.setStyleSheet(primary_btn_style())
         self.go_to_instructions_btn.clicked.connect(self.go_to_instructions_requested.emit)
         footer_row.addWidget(self.go_to_instructions_btn)
 
