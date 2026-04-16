@@ -385,7 +385,7 @@ class _InfoBlock(QWidget):
                  min_w: int = 140, parent=None):
         super().__init__(parent)
         self.setMinimumWidth(min_w)
-        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
         self.setStyleSheet("background: transparent;")
 
         lo = QHBoxLayout(self)
@@ -411,6 +411,7 @@ class _InfoBlock(QWidget):
         self._value_lbl = QLabel(value)
         self._value_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self._value_lbl.setMinimumWidth(0)
+        self._value_lbl.setWordWrap(False)
         self._value_lbl.setStyleSheet(
             f"color: {PALETTE['text_primary']}; font-size: 13px; font-weight: 700;"
         )
@@ -449,18 +450,25 @@ class DataPanel(QFrame):
         root.setContentsMargins(0, 0, 0, 0)
         root.setSpacing(0)
 
-        # ── 四个信息块，用竖分隔线隔开 ──────────────────────────────
-        self._blk_target = _InfoBlock("◕", "分析物", "—", 150)
-        self._blk_ligand = _InfoBlock("◆", "配体", "—", 150)
-        self._blk_buf = _InfoBlock("⬛", "缓冲液", "—", 280)
+        # ── 六个信息块，用竖分隔线隔开；按内容长度自适应宽度 ─────────────
+        self._blk_target = _InfoBlock("◕", "分析物", "—", 110)
+        self._blk_ligand = _InfoBlock("◆", "配体", "—", 110)
+        self._blk_buf = _InfoBlock("⬛", "缓冲液", "—", 300)
         self._blk_cap = _InfoBlock("▮", "毛细管", "—", 220)
-        self._blk_excit = _InfoBlock("☀", "激发光功率", "—", 240)
-        self._blk_mst = _InfoBlock("✳", "MST 功率", "—", 120)
+        self._blk_excit = _InfoBlock("☀", "激发光功率", "—", 280)
+        self._blk_mst = _InfoBlock("✳", "MST 功率", "—", 90)
 
-        for blk in [self._blk_target, self._blk_ligand,
-                    self._blk_buf, self._blk_cap,
-                    self._blk_excit, self._blk_mst]:
-            root.addWidget(blk, 1)
+        blocks = [
+            self._blk_target,
+            self._blk_ligand,
+            self._blk_buf,
+            self._blk_cap,
+            self._blk_excit,
+            self._blk_mst,
+        ]
+
+        for blk in blocks:
+            root.addWidget(blk, 0)
             root.addWidget(_vsep())
 
         # 移除最后一根多余的分隔线
