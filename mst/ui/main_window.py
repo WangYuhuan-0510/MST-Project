@@ -117,6 +117,8 @@ class MainWindow(QMainWindow):
             instructions_view = self.project_view.content.stack.widget(1)
             if hasattr(instructions_view, "set_go_to_plan_callback"):
                 instructions_view.set_go_to_plan_callback(lambda: self.project_view.content.tab_bar._select(0))
+            if hasattr(setup_view := self.project_view.content.stack.widget(0), "go_to_instructions_requested"):
+                setup_view.go_to_instructions_requested.connect(lambda: self.project_view.content.tab_bar._select(1))
             self._bind_plan_autosave()
         return self.project_view
 

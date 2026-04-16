@@ -297,6 +297,7 @@ class ExcitationSpinBox(QSpinBox):
 
 class ExperimentSetupView(QScrollArea):
     edit_requested = Signal()
+    go_to_instructions_requested = Signal()
 
     """
     ???????
@@ -649,12 +650,26 @@ class ExperimentSetupView(QScrollArea):
             self.spin_excitation,
             self.cmb_mst,
         ]
-        self.set_plan_lock_state(locked=False, allow_plan_edit=True)
 
         two_col.addLayout(left_col, 1)
         two_col.addLayout(right_col, 1)
         root.addLayout(two_col)
+
+        footer_row = QHBoxLayout()
+        footer_row.setContentsMargins(0, 4, 0, 0)
+        footer_row.setSpacing(12)
+        footer_row.addStretch()
+
+        self.go_to_instructions_btn = QPushButton("Go to Instructions")
+        self.go_to_instructions_btn.setFixedHeight(36)
+        self.go_to_instructions_btn.setCursor(Qt.PointingHandCursor)
+        self.go_to_instructions_btn.setStyleSheet(secondary_btn_style())
+        self.go_to_instructions_btn.clicked.connect(self.go_to_instructions_requested.emit)
+        footer_row.addWidget(self.go_to_instructions_btn)
+
+        root.addLayout(footer_row)
         root.addStretch()
+        self.set_plan_lock_state(locked=False, allow_plan_edit=True)
 
     # ── Private helpers ──────────────────────────────────────────────────────
 
@@ -686,6 +701,7 @@ class ExperimentSetupView(QScrollArea):
         self.set_fields_enabled(self._editable_widgets, plan_enabled)
         self.set_fields_enabled(self._system_widgets, False if locked else True)
         self.alter_btn.setEnabled(locked)
+        self.go_to_instructions_btn.setEnabled(plan_enabled)
         self._refresh_instruction_field_styles()
 
     def _apply_instruction_visibility(self) -> None:
