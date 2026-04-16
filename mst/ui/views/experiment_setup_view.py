@@ -272,7 +272,7 @@ def _editable_combo(items: list[str], *, allow_blank: bool = False, editable: bo
     return combo
 
 
-LABEL_W = 260   # 左侧字段标签固定宽度，用于两栏对齐
+LABEL_W = 180   # 左侧字段标签固定宽度，用于两栏对齐
 
 
 class ExcitationSpinBox(QSpinBox):
@@ -342,7 +342,7 @@ class ExperimentSetupView(QScrollArea):
 
         # ── 两栏布局 ─────────────────────────────────────────────────────────
         two_col = QHBoxLayout()
-        two_col.setSpacing(20)
+        two_col.setSpacing(12)
         two_col.setAlignment(Qt.AlignTop)
 
         # ════════════ 左栏 ════════════
@@ -540,7 +540,7 @@ class ExperimentSetupView(QScrollArea):
         sc.addWidget(divider())
 
         sys_row = QHBoxLayout()
-        sys_row.setSpacing(40)
+        sys_row.setSpacing(12)
         sys_row.setAlignment(Qt.AlignLeft)
 
         # 激发光功率
@@ -549,6 +549,7 @@ class ExperimentSetupView(QScrollArea):
         ex_icon = QLabel("☀")
         ex_icon.setStyleSheet(f"color: {PALETTE['accent']}; font-size: 16px;")
         ex_title = QLabel("激发光功率")
+        ex_title.setMinimumWidth(88)
         ex_title.setStyleSheet(label_style(13, 600, "text_secondary"))
         ex_hdr.addWidget(ex_icon)
         ex_hdr.addWidget(ex_title)
@@ -589,7 +590,7 @@ class ExperimentSetupView(QScrollArea):
         self.cmb_mst = QComboBox()
         self.cmb_mst.addItems(["低", "中", "高"])
         self.cmb_mst.setCurrentIndex(1)
-        self.cmb_mst.setFixedWidth(100)
+        self.cmb_mst.setFixedWidth(84)
         self.cmb_mst.setStyleSheet(_combo_style())
         mst_ctrl.addWidget(self.cmb_mst)
         mst_ctrl.addWidget(_edit_btn())
@@ -651,8 +652,8 @@ class ExperimentSetupView(QScrollArea):
         ]
         self.set_plan_lock_state(locked=False, allow_plan_edit=True)
 
-        two_col.addLayout(left_col, 1)
-        two_col.addLayout(right_col, 1)
+        two_col.addLayout(left_col, 5)
+        two_col.addLayout(right_col, 4)
         root.addLayout(two_col)
         root.addStretch()
 
