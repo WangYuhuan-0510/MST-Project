@@ -73,6 +73,7 @@ class ExperimentItem(QPushButton):
         number_layout.addStretch(1)
 
         order_lbl = QLabel(str(self.order_index))
+        self.order_lbl = order_lbl
         order_lbl.setAlignment(Qt.AlignCenter)
         order_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
         order_lbl.setStyleSheet(
@@ -127,6 +128,7 @@ class ExperimentItem(QPushButton):
         top_spacer.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
 
         dirty_mark = QLabel("*")
+        self.dirty_mark = dirty_mark
         dirty_mark.setVisible(self.is_dirty)
         dirty_mark.setAttribute(Qt.WA_TransparentForMouseEvents)
         dirty_mark.setStyleSheet(
@@ -138,6 +140,7 @@ class ExperimentItem(QPushButton):
         )
 
         status_dot = QLabel("●")
+        self.status_dot = status_dot
         status_dot.setFixedWidth(8)
         status_dot.setStyleSheet(f"color: {dot_color}; background: transparent; font-size: 8px;")
         status_dot.setAttribute(Qt.WA_TransparentForMouseEvents)
@@ -299,6 +302,29 @@ class ExperimentItem(QPushButton):
     def _emit_rename_requested(self) -> None:
         if self.experiment_id:
             self.rename_requested.emit(self.experiment_id)
+
+    def update_display(self, *, name: str, status: str, experiment_type_id: str, experiment_type_name: str, order_index: int, is_dirty: bool) -> None:
+        self.experiment_name = str(name or "未命名实验").strip() or "未命名实验"
+        self.experiment_type_id = normalize_experiment_type_id(experiment_type_id or "pre_test")
+        self.experiment_type_name = str(experiment_type_name or get_experiment_type_config(self.experiment_type_id).get("name") or "Pre-test")
+        if self.experiment_type_name.casefold() == "binding test":
+            self.experiment_type_name = "binding check"
+        self.order_index = max(1, int(order_index or 1))
+        self.is_dirty = bool(is_dirty)
+
+        status_colors = {
+            "draft": PALETTE["text_muted"],
+            "running": PALETTE["warning"],
+            "done": PALETTE["success"],
+            "failed": PALETTE["danger"],
+        }
+
+        self.order_lbl.setText(str(self.order_index))
+        self.name_lbl.setText(self.experiment_name)
+        self.dirty_mark.setVisible(self.is_dirty)
+        self.status_dot.setStyleSheet(
+            f"color: {status_colors.get(status, PALETTE['text_muted'])}; background: transparent; font-size: 8px;"
+        )
 
     def _emit_delete_requested(self) -> None:
         if self.experiment_id:
