@@ -1013,6 +1013,10 @@ class MainWindow(QMainWindow):
             pv.select_experiment(self.current_experiment_id)
             pv.update_metadata({**dict(exp.metadata or {}), **dict(exp.setup_data or {}), **dict(exp.protocol or {})})
 
+            current_tab_idx = pv.content.tab_bar.current_index()
+            if current_tab_idx == 1:
+                self._on_project_tab_changed(1)
+
             self.current_excitation = str(exp.metadata.get("excitation", self.current_excitation) or self.current_excitation)
             self.current_experiment_type = str(exp.metadata.get("experiment_type", self.current_experiment_type) or self.current_experiment_type)
             self._refresh_window_title()
