@@ -177,7 +177,23 @@ class MainWindow(QMainWindow):
             return
         if self.project_view is None:
             return
-        if self._refresh_single_sidebar_experiment(exp_id):
+        state = self._ensure_session_state(exp_id, display_name=self._get_display_name(exp_id))
+        experiment_type_id = normalize_experiment_type_id(state.experiment_type_id or "pre_test")
+        experiment_type_name = str(
+            state.experiment_type_name
+            or get_experiment_type_config(experiment_type_id).get("name")
+            or "Pre-test"
+        )
+        order_index = self._get_assigned_experiment_order(exp_id) or self._assign_experiment_order(exp_id)
+        if self.project_view.sidebar.update_experiment_item(
+            exp_id,
+            name=str(state.display_name or self._get_display_name(exp_id)),
+            status=self._experiment_status_by_id.get(exp_id, "draft"),
+            experiment_type_id=experiment_type_id,
+            experiment_type_name=experiment_type_name,
+            order_index=order_index,
+            is_dirty=dirty,
+        ):
             return
         self._refresh_sidebar_experiments()
 

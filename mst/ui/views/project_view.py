@@ -333,28 +333,17 @@ class Sidebar(QWidget):
         is_dirty: bool = False,
     ) -> bool:
         wanted = str(experiment_id or "").strip()
-        for old_btn in self._exp_buttons:
-            if old_btn.experiment_id != wanted:
+        for btn in self._exp_buttons:
+            if btn.experiment_id != wanted:
                 continue
-            replacement = ExperimentItem(
-                name,
-                status,
-                experiment_id=wanted,
+            btn.update_display(
+                name=name,
+                status=status,
                 experiment_type_id=experiment_type_id,
                 experiment_type_name=experiment_type_name,
                 order_index=order_index,
                 is_dirty=is_dirty,
             )
-            replacement.clicked.connect(lambda _, b=replacement: self._select_exp(b))
-            replacement.rename_requested.connect(self.experiment_rename_requested.emit)
-            replacement.delete_requested.connect(self.experiment_delete_requested.emit)
-            replacement.setChecked(old_btn.isChecked())
-            index = self._exp_layout.indexOf(old_btn)
-            if index < 0:
-                return False
-            self._exp_layout.insertWidget(index, replacement)
-            self._exp_buttons[self._exp_buttons.index(old_btn)] = replacement
-            old_btn.deleteLater()
             return True
         return False
 
