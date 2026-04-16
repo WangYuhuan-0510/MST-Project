@@ -25,7 +25,8 @@ _UNSAVED_EXPERIMENTS_TITLE = "存在未保存实验"
 from mst.core.app_state import AppState
 from mst.core.data_manager import DataManager
 from mst.core.experiment_schema import default_setup_data, get_experiment_type_config, list_experiment_types, normalize_experiment_type_id
-from mst.core.instruction_rules import initialize_plan_data_for_new_experiment, validate_instruction_inputs, build_instruction_content
+from mst.core.instruction_rules import initialize_plan_data_for_new_experiment
+from mst.core.instruction_state_service import resolve_instruction_page_state
 from mst.core.experiments import Experiment
 from .views.welcome_view import WelcomeView
 from .views.session_wizard import SessionWizard
@@ -581,19 +582,16 @@ class MainWindow(QMainWindow):
 
         if idx == 1:
             plan_data = dict(setup_view.get_params() or {}) if hasattr(setup_view, "get_params") else {}
-            validation = validate_instruction_inputs(self.current_experiment_type_id, plan_data)
+            page_state = resolve_instruction_page_state(self.current_experiment_type_id, plan_data)
             if hasattr(setup_view, "apply_instruction_validation"):
-                setup_view.apply_instruction_validation(validation)
-            if validation.can_enter_instructions:
+                setup_view.apply_instruction_validation(page_state.validation)
+            if page_state.mode == "content":
                 self._capture_current_plan_snapshot(mark_dirty=False)
-                if hasattr(instructions_view, "show_instruction_content"):
-                    instructions_view.show_instruction_content(
-                        build_instruction_content(self.current_experiment_type_id, plan_data)
-                    )
+                if hasattr(instructions_view, "show_instruction_content") and page_state.content is not None:
+                    instructions_view.show_instruction_content(page_state.content)
             else:
-                missing_labels = [validation.inline_errors.get(key) or key for key in validation.missing_fields]
                 if hasattr(instructions_view, "show_missing_inputs"):
-                    instructions_view.show_missing_inputs(missing_labels)
+                    instructions_view.show_missing_inputs(list(page_state.missing_messages))
             self._apply_setup_lock_state()
             return
 

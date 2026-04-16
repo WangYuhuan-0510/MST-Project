@@ -273,7 +273,7 @@ def _editable_combo(items: list[str], *, allow_blank: bool = False, editable: bo
     return combo
 
 
-LABEL_W = 260   # 左侧字段标签固定宽度，用于两栏对齐
+LABEL_W = 190   # 字段标签宽度，避免 Plan 页出现横向滚动
 
 
 class ExcitationSpinBox(QSpinBox):
@@ -311,13 +311,23 @@ class ExperimentSetupView(QScrollArea):
         self._excitation_color = "RED"
         self.setFrameShape(QFrame.NoFrame)
         self.setWidgetResizable(True)
+        self.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.setStyleSheet(f"background: {PALETTE['bg_main']};")
 
         inner = QWidget()
         inner.setStyleSheet(f"background: {PALETTE['bg_main']};")
         self.setWidget(inner)
 
-        root = QVBoxLayout(inner)
+        shell = QVBoxLayout(inner)
+        shell.setContentsMargins(0, 0, 0, 0)
+        shell.setSpacing(0)
+
+        content = QWidget()
+        content.setMaximumWidth(960)
+        content.setStyleSheet(f"background: {PALETTE['bg_main']};")
+        shell.addWidget(content, 0, Qt.AlignHCenter | Qt.AlignTop)
+
+        root = QVBoxLayout(content)
         root.setContentsMargins(28, 24, 28, 28)
         root.setSpacing(16)
 
@@ -351,6 +361,7 @@ class ExperimentSetupView(QScrollArea):
         left_col = QVBoxLayout()
         left_col.setSpacing(14)
         left_col.setAlignment(Qt.AlignTop)
+        left_col.setContentsMargins(0, 0, 10, 0)
 
         # ── 分析物 ────────────────────────────────────────────────────────
         target_card = _section_card()
@@ -364,6 +375,7 @@ class ExperimentSetupView(QScrollArea):
         r0 = QHBoxLayout(); r0.setSpacing(6)
         self.cmb_target = _editable_combo(["NTA", "His-Tag", "Biotin", "Amine", "Thiol"], editable=True)
         r0.addWidget(self.cmb_target, 1)
+        r0.addStretch()
         r0.addWidget(_help_btn())
         tc.addLayout(r0)
 
@@ -419,6 +431,7 @@ class ExperimentSetupView(QScrollArea):
             "PBS Buffer including 0.05% Tween",
         ])
         rb.addWidget(self.cmb_buffer, 1)
+        rb.addStretch()
         rb.addWidget(_help_btn())
         bc.addLayout(rb)
 
@@ -445,6 +458,7 @@ class ExperimentSetupView(QScrollArea):
             "Monolith NT.自动化毛细管芯片",
         ], allow_blank=True)
         rc.addWidget(self.cmb_capillary, 1)
+        rc.addStretch()
         rc.addWidget(_help_btn())
         cc.addLayout(rc)
 
@@ -455,6 +469,7 @@ class ExperimentSetupView(QScrollArea):
         right_col = QVBoxLayout()
         right_col.setSpacing(14)
         right_col.setAlignment(Qt.AlignTop)
+        right_col.setContentsMargins(8, 0, 0, 0)
 
         # ── 配体 ──────────────────────────────────────────────────────────
         lig_card = _section_card()
@@ -468,6 +483,7 @@ class ExperimentSetupView(QScrollArea):
         rl0 = QHBoxLayout(); rl0.setSpacing(6)
         self.cmb_ligand = _editable_combo(["mCNGC30", "EGFR", "HER2"], editable=True)
         rl0.addWidget(self.cmb_ligand, 1)
+        rl0.addStretch()
         rl0.addWidget(_help_btn())
         lc.addLayout(rl0)
 
@@ -527,8 +543,8 @@ class ExperimentSetupView(QScrollArea):
         rl5.addWidget(self.edit_hi_conc)
         rl5.addWidget(hi_unit)
         rl5.addWidget(_edit_btn())
-        rl5.addWidget(_help_btn())
         rl5.addStretch()
+        rl5.addWidget(_help_btn())
         lc.addLayout(rl5)
 
         right_col.addWidget(lig_card)
@@ -542,11 +558,12 @@ class ExperimentSetupView(QScrollArea):
         sc.addWidget(divider())
 
         sys_row = QHBoxLayout()
-        sys_row.setSpacing(40)
-        sys_row.setAlignment(Qt.AlignLeft)
+        sys_row.setSpacing(24)
+        sys_row.setAlignment(Qt.AlignLeft | Qt.AlignTop)
 
         # 激发光功率
-        ex_blk = QVBoxLayout(); ex_blk.setSpacing(6)
+        ex_blk = QVBoxLayout(); ex_blk.setSpacing(8)
+        ex_blk.setContentsMargins(0, 0, 0, 0)
         ex_hdr = QHBoxLayout(); ex_hdr.setSpacing(6)
         ex_icon = QLabel("☀")
         ex_icon.setStyleSheet(f"color: {PALETTE['accent']}; font-size: 16px;")
@@ -557,7 +574,7 @@ class ExperimentSetupView(QScrollArea):
         ex_hdr.addStretch()
         ex_blk.addLayout(ex_hdr)
 
-        ex_ctrl = QHBoxLayout(); ex_ctrl.setSpacing(6)
+        ex_ctrl = QHBoxLayout(); ex_ctrl.setSpacing(8)
         self.chk_auto = QCheckBox("自动检测")
         self.chk_auto.setStyleSheet(_check_style())
         self.chk_auto.setChecked(True)
@@ -571,12 +588,12 @@ class ExperimentSetupView(QScrollArea):
         self.spin_excitation.setEnabled(True)
         ex_ctrl.addWidget(self.chk_auto)
         ex_ctrl.addWidget(self.spin_excitation)
-        ex_ctrl.addWidget(_help_btn())
         ex_ctrl.addStretch()
         ex_blk.addLayout(ex_ctrl)
 
         # MST 功率
-        mst_blk = QVBoxLayout(); mst_blk.setSpacing(6)
+        mst_blk = QVBoxLayout(); mst_blk.setSpacing(8)
+        mst_blk.setContentsMargins(0, 0, 0, 0)
         mst_hdr = QHBoxLayout(); mst_hdr.setSpacing(6)
         mst_icon = QLabel("✳")
         mst_icon.setStyleSheet(f"color: {PALETTE['accent']}; font-size: 16px;")
@@ -587,20 +604,22 @@ class ExperimentSetupView(QScrollArea):
         mst_hdr.addStretch()
         mst_blk.addLayout(mst_hdr)
 
-        mst_ctrl = QHBoxLayout(); mst_ctrl.setSpacing(6)
+        mst_ctrl = QHBoxLayout(); mst_ctrl.setSpacing(8)
         self.cmb_mst = QComboBox()
         self.cmb_mst.addItems(["低", "中", "高"])
         self.cmb_mst.setCurrentIndex(1)
-        self.cmb_mst.setFixedWidth(100)
+        self.cmb_mst.setFixedWidth(92)
         self.cmb_mst.setStyleSheet(_combo_style())
         mst_ctrl.addWidget(self.cmb_mst)
         mst_ctrl.addWidget(_edit_btn())
-        mst_ctrl.addWidget(_help_btn())
         mst_ctrl.addStretch()
         mst_blk.addLayout(mst_ctrl)
 
-        sys_row.addLayout(ex_blk)
-        sys_row.addLayout(mst_blk)
+        sys_help_btn = _help_btn()
+        sys_row.addLayout(ex_blk, 3)
+        sys_row.addLayout(mst_blk, 2)
+        sys_row.addStretch(1)
+        sys_row.addWidget(sys_help_btn, 0, Qt.AlignTop)
         sc.addLayout(sys_row)
 
         right_col.addWidget(sys_card)
