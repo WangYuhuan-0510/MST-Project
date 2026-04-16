@@ -336,8 +336,6 @@ class ExperimentSetupView(QScrollArea):
         title_row.addWidget(self.page_title)
         title_row.addStretch()
         title_row.addWidget(self.alter_btn)
-        title_row.addSpacing(6)
-        title_row.addWidget(_help_btn())
         root.addLayout(title_row)
         root.addWidget(divider())
         root.addSpacing(2)
