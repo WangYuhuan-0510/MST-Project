@@ -16,7 +16,11 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 
 from mst.core.experiment_schema import get_experiment_type_config
-from mst.core.instruction_rules import get_visible_instruction_fields, InstructionValidationResult
+from mst.core.instruction_rules import (
+    get_visible_instruction_fields,
+    InstructionValidationResult,
+    validate_instruction_inputs,
+)
 
 from .ui_style import (
     PALETTE,
@@ -721,7 +725,9 @@ class ExperimentSetupView(QScrollArea):
     def set_experiment_type(self, experiment_type_id: str) -> None:
         self._experiment_type_id = str(experiment_type_id or "pre_test")
         self._apply_instruction_visibility()
-        self._clear_instruction_feedback()
+        self.apply_instruction_validation(
+            validate_instruction_inputs(self._experiment_type_id, self.get_params())
+        )
 
     def set_excitation_color(self, color: str) -> None:
         self._excitation_color = str(color or "RED").upper()
@@ -755,7 +761,9 @@ class ExperimentSetupView(QScrollArea):
             or "pre_test"
         )
         self._apply_instruction_visibility()
-        self._clear_instruction_feedback()
+        self.apply_instruction_validation(
+            validate_instruction_inputs(self._experiment_type_id, self.get_params())
+        )
 
     def get_params(self) -> dict:
         """返回当前界面所有参数的字典快照（供其他模块读取）。"""

@@ -369,6 +369,10 @@ class MainWindow(QMainWindow):
         def remember(*_args) -> None:
             if self._suspend_plan_autosave:
                 return
+            if hasattr(setup_view, "apply_instruction_validation"):
+                setup_view.apply_instruction_validation(
+                    validate_instruction_inputs(self.current_experiment_type_id, setup_view.get_params())
+                )
             if self.current_experiment_id:
                 self._mark_dirty(self.current_experiment_id, True)
                 if not self._refresh_single_sidebar_experiment(self.current_experiment_id):
