@@ -23,6 +23,8 @@ PALETTE: dict[str, str] = {
     "text_muted":     "#9D89AA",   # 浅紫灰，弱提示
     "border":         "#DDD4EA",   # 边框浅紫
     "border_active":  "#82318E",   # 激活边框紫
+    "required_glow":  "#9F58BC",   # 必填高光紫（明度略高）
+    "required_fill":  "#F1E1F7",   # 必填高光底色
     "danger":         "#C0394B",   # 危险红
     "success":        "#2E7D5E",   # 成功绿
     "warning":        "#B06A00",   # 警告橙
@@ -146,18 +148,17 @@ def groupbox_style() -> str:
             background: {PALETTE['bg_card']};
             border: 1px solid {PALETTE['border']};
             border-radius: 10px;
-            margin-top: 14px;
-            font-size: 12px;
+            margin-top: 12px;
+            padding: 14px 12px 12px 12px;
+            color: {PALETTE['text_primary']};
+            font-size: 13px;
             font-weight: 600;
-            color: {PALETTE['text_secondary']};
         }}
         QGroupBox::title {{
             subcontrol-origin: margin;
-            subcontrol-position: top left;
             left: 12px;
-            padding: 0 4px;
+            padding: 0 6px;
             color: {PALETTE['text_secondary']};
-            letter-spacing: 0.3px;
         }}
     """
 
@@ -167,10 +168,11 @@ def checkbox_style() -> str:
         QCheckBox {{
             color: {PALETTE['text_secondary']};
             font-size: 13px;
-            spacing: 6px;
+            spacing: 8px;
         }}
         QCheckBox::indicator {{
-            width: 16px; height: 16px;
+            width: 16px;
+            height: 16px;
             border: 1px solid {PALETTE['border']};
             border-radius: 4px;
             background: {PALETTE['bg_card']};
@@ -185,7 +187,7 @@ def checkbox_style() -> str:
     """
 
 
-def label_style(size: int = 13, weight: int = 400, color_key: str = "text_secondary") -> str:
+def label_style(size: int = 13, weight: int = 500, color_key: str = "text_secondary") -> str:
     return (
         f"color: {PALETTE[color_key]};"
         f"font-size: {size}px;"
@@ -193,11 +195,20 @@ def label_style(size: int = 13, weight: int = 400, color_key: str = "text_second
     )
 
 
+def title_style(size: int = 22) -> str:
+    return (
+        f"color: {PALETTE['text_primary']};"
+        f"font-size: {size}px;"
+        "font-weight: 700;"
+        "letter-spacing: -0.3px;"
+    )
+
+
 def section_label(text: str) -> QLabel:
     lbl = QLabel(text)
     lbl.setStyleSheet(
         f"color: {PALETTE['text_muted']};"
-        "font-size: 10px;"
+        "font-size: 11px;"
         "font-weight: 700;"
         "letter-spacing: 1.2px;"
     )
@@ -205,10 +216,57 @@ def section_label(text: str) -> QLabel:
 
 
 def divider() -> QFrame:
-    line = QFrame()
-    line.setFrameShape(QFrame.HLine)
-    line.setFixedHeight(1)
-    line.setStyleSheet(
-        f"background: {PALETTE['border']}; border: none;"
+    f = QFrame()
+    f.setFixedHeight(1)
+    f.setStyleSheet(f"background: {PALETTE['border']}; border: none;")
+    return f
+
+
+def empty_state(icon: str, title: str, body: str) -> QFrame:
+    frame = QFrame()
+    frame.setStyleSheet(
+        f"background: {PALETTE['bg_card']};"
+        f"border: 1px dashed {PALETTE['border']};"
+        "border-radius: 12px;"
     )
-    return line
+    lo = QVBoxLayout(frame)
+    lo.setContentsMargins(28, 28, 28, 28)
+    lo.setSpacing(8)
+
+    icon_lbl = QLabel(icon)
+    icon_lbl.setStyleSheet(f"font-size: 28px; color: {PALETTE['text_muted']};")
+    title_lbl = QLabel(title)
+    title_lbl.setStyleSheet(title_style(18))
+    body_lbl = QLabel(body)
+    body_lbl.setWordWrap(True)
+    body_lbl.setStyleSheet(label_style(13, 500, "text_secondary"))
+
+    lo.addWidget(icon_lbl)
+    lo.addWidget(title_lbl)
+    lo.addWidget(body_lbl)
+    lo.addStretch()
+    return frame
+
+
+def ghost_icon_button(text: str = "", size: int = 30) -> QPushButton:
+    btn = QPushButton(text)
+    btn.setFixedSize(size, size)
+    btn.setStyleSheet(f"""
+        QPushButton {{
+            background: transparent;
+            border: 1px solid {PALETTE['border']};
+            border-radius: {size // 2}px;
+            color: {PALETTE['text_secondary']};
+            font-size: 12px;
+            font-weight: 600;
+        }}
+        QPushButton:hover {{
+            background: {PALETTE['bg_hover']};
+            border-color: {PALETTE['accent']};
+            color: {PALETTE['accent']};
+        }}
+        QPushButton:pressed {{
+            background: {PALETTE['bg_active']};
+        }}
+    """)
+    return btn

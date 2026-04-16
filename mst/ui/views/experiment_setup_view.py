@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 from PySide6.QtCore import Qt, Signal
 
 from mst.core.experiment_schema import get_experiment_type_config
+from mst.core.instruction_rules import get_visible_instruction_fields, InstructionValidationResult
 
 from .ui_style import (
     PALETTE,
@@ -35,11 +36,14 @@ UNIT_OPTIONS = ["M", "mM", "µM", "nM", "pM"]
 #  Local style helpers
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _input_style() -> str:
+def _input_style(error: bool = False) -> str:
+    border = PALETTE['required_glow'] if error else PALETTE['border']
+    focus_border = PALETTE['required_glow'] if error else PALETTE['border_active']
+    background = PALETTE['required_fill'] if error else PALETTE['bg_card']
     return f"""
         QLineEdit {{
-            background: {PALETTE['bg_card']};
-            border: 1px solid {PALETTE['border']};
+            background: {background};
+            border: 1px solid {border};
             border-radius: 6px;
             color: {PALETTE['text_primary']};
             font-size: 13px;
@@ -47,7 +51,7 @@ def _input_style() -> str:
             min-height: 28px;
         }}
         QLineEdit:focus {{
-            border: 1px solid {PALETTE['border_active']};
+            border: 1px solid {focus_border};
         }}
     """
 
@@ -66,11 +70,14 @@ def _input_readonly_style() -> str:
     """
 
 
-def _combo_style() -> str:
+def _combo_style(error: bool = False) -> str:
+    border = PALETTE['required_glow'] if error else PALETTE['border']
+    focus_border = PALETTE['required_glow'] if error else PALETTE['border_active']
+    background = PALETTE['required_fill'] if error else PALETTE['bg_card']
     return f"""
         QComboBox {{
-            background: {PALETTE['bg_card']};
-            border: 1px solid {PALETTE['border']};
+            background: {background};
+            border: 1px solid {border};
             border-radius: 6px;
             color: {PALETTE['text_primary']};
             font-size: 13px;
@@ -78,7 +85,7 @@ def _combo_style() -> str:
             min-height: 28px;
         }}
         QComboBox:focus {{
-            border: 1px solid {PALETTE['border_active']};
+            border: 1px solid {focus_border};
         }}
         QComboBox::drop-down {{
             subcontrol-origin: padding;
@@ -250,6 +257,17 @@ def _unit_combo(items: list[str]) -> QComboBox:
     return c
 
 
+def _editable_combo(items: list[str], *, allow_blank: bool = False, editable: bool = False) -> QComboBox:
+    combo = QComboBox()
+    combo.setEditable(editable)
+    combo.setInsertPolicy(QComboBox.NoInsert)
+    if allow_blank:
+        combo.addItem("")
+    combo.addItems(items)
+    combo.setStyleSheet(_combo_style())
+    return combo
+
+
 LABEL_W = 260   # 左侧字段标签固定宽度，用于两栏对齐
 
 
@@ -330,6 +348,7 @@ class ExperimentSetupView(QScrollArea):
 
         # ── 分析物 ────────────────────────────────────────────────────────
         target_card = _section_card()
+        self._target_card = target_card
         tc = QVBoxLayout(target_card)
         tc.setContentsMargins(20, 16, 20, 18)
         tc.setSpacing(11)
@@ -337,11 +356,7 @@ class ExperimentSetupView(QScrollArea):
         tc.addWidget(divider())
 
         r0 = QHBoxLayout(); r0.setSpacing(6)
-        self.cmb_target = QComboBox()
-        self.cmb_target.setEditable(True)
-        self.cmb_target.setInsertPolicy(QComboBox.NoInsert)
-        self.cmb_target.addItems(["NTA", "His-Tag", "Biotin", "Amine", "Thiol"])
-        self.cmb_target.setStyleSheet(_combo_style())
+        self.cmb_target = _editable_combo(["NTA", "His-Tag", "Biotin", "Amine", "Thiol"], editable=True)
         r0.addWidget(self.cmb_target, 1)
         r0.addWidget(_help_btn())
         tc.addLayout(r0)
@@ -355,6 +370,11 @@ class ExperimentSetupView(QScrollArea):
         tc.addLayout(r1)
 
         r2 = QHBoxLayout(); r2.setSpacing(6)
+        self._target_stock_row = r2
+        self._target_stock_error = QLabel()
+        self._target_stock_error.hide()
+        self._target_stock_error.setStyleSheet(f"color: {PALETTE['danger']}; font-size: 11px; font-weight: 600;")
+        tc.addWidget(self._target_stock_error)
         r2.addWidget(_field_lbl("母液浓度", LABEL_W))
         self.edit_target_stock = QLineEdit("5")
         self.edit_target_stock.setFixedWidth(80)
@@ -387,13 +407,11 @@ class ExperimentSetupView(QScrollArea):
         bc.addWidget(divider())
 
         rb = QHBoxLayout(); rb.setSpacing(6)
-        self.cmb_buffer = QComboBox()
-        self.cmb_buffer.addItems([
+        self.cmb_buffer = _editable_combo([
             "MST Buffer including 0.05% Tween",
             "PBS including 0.05% Tween",
             "PBS Buffer including 0.05% Tween",
         ])
-        self.cmb_buffer.setStyleSheet(_combo_style())
         rb.addWidget(self.cmb_buffer, 1)
         rb.addWidget(_help_btn())
         bc.addLayout(rb)
@@ -402,6 +420,7 @@ class ExperimentSetupView(QScrollArea):
 
         # ── 毛细管 ────────────────────────────────────────────────────────
         cap_card = _section_card()
+        self._capillary_card = cap_card
         cc = QVBoxLayout(cap_card)
         cc.setContentsMargins(20, 16, 20, 18)
         cc.setSpacing(11)
@@ -409,13 +428,16 @@ class ExperimentSetupView(QScrollArea):
         cc.addWidget(divider())
 
         rc = QHBoxLayout(); rc.setSpacing(6)
-        self.cmb_capillary = QComboBox()
-        self.cmb_capillary.addItems([
+        self._capillary_row = rc
+        self._capillary_error = QLabel()
+        self._capillary_error.hide()
+        self._capillary_error.setStyleSheet(f"color: {PALETTE['danger']}; font-size: 11px; font-weight: 600;")
+        cc.addWidget(self._capillary_error)
+        self.cmb_capillary = _editable_combo([
             "Monolith NT.115 毛细管",
             "Monolith NT.115 Premium 毛细管",
             "Monolith NT.自动化毛细管芯片",
-        ])
-        self.cmb_capillary.setStyleSheet(_combo_style())
+        ], allow_blank=True)
         rc.addWidget(self.cmb_capillary, 1)
         rc.addWidget(_help_btn())
         cc.addLayout(rc)
@@ -430,6 +452,7 @@ class ExperimentSetupView(QScrollArea):
 
         # ── 配体 ──────────────────────────────────────────────────────────
         lig_card = _section_card()
+        self._ligand_card = lig_card
         lc = QVBoxLayout(lig_card)
         lc.setContentsMargins(20, 16, 20, 18)
         lc.setSpacing(11)
@@ -437,11 +460,7 @@ class ExperimentSetupView(QScrollArea):
         lc.addWidget(divider())
 
         rl0 = QHBoxLayout(); rl0.setSpacing(6)
-        self.cmb_ligand = QComboBox()
-        self.cmb_ligand.setEditable(True)
-        self.cmb_ligand.setInsertPolicy(QComboBox.NoInsert)
-        self.cmb_ligand.addItems(["mCNGC30", "EGFR", "HER2"])
-        self.cmb_ligand.setStyleSheet(_combo_style())
+        self.cmb_ligand = _editable_combo(["mCNGC30", "EGFR", "HER2"], editable=True)
         rl0.addWidget(self.cmb_ligand, 1)
         rl0.addWidget(_help_btn())
         lc.addLayout(rl0)
@@ -460,6 +479,11 @@ class ExperimentSetupView(QScrollArea):
         lc.addLayout(rl1)
 
         rl2 = QHBoxLayout(); rl2.setSpacing(6)
+        self._lig_stock_row = rl2
+        self._lig_stock_error = QLabel()
+        self._lig_stock_error.hide()
+        self._lig_stock_error.setStyleSheet(f"color: {PALETTE['danger']}; font-size: 11px; font-weight: 600;")
+        lc.addWidget(self._lig_stock_error)
         rl2.addWidget(_field_lbl("母液浓度", LABEL_W))
         self.edit_lig_stock = QLineEdit("16")
         self.edit_lig_stock.setFixedWidth(80)
@@ -577,6 +601,29 @@ class ExperimentSetupView(QScrollArea):
 
         right_col.addStretch()
 
+        self._field_widgets: dict[str, QWidget] = {
+            "target_stock": self.edit_target_stock,
+            "capillary": self.cmb_capillary,
+            "lig_stock": self.edit_lig_stock,
+        }
+        self._field_error_labels: dict[str, QLabel] = {
+            "target_stock": self._target_stock_error,
+            "capillary": self._capillary_error,
+            "lig_stock": self._lig_stock_error,
+        }
+        self._field_containers: dict[str, QWidget] = {
+            "ligand": self._ligand_card,
+            "kd_estimated": self._ligand_card,
+            "kd_unit": self._ligand_card,
+            "lig_stock": self._ligand_card,
+            "lig_stock_unit": self._ligand_card,
+            "lig_in_dmso": self._ligand_card,
+            "hi_conc": self._ligand_card,
+        }
+        self._instruction_validation_state = InstructionValidationResult(can_enter_instructions=True)
+        self._apply_instruction_visibility()
+        self._clear_instruction_feedback()
+
         self._editable_widgets = [
             self.cmb_target,
             self.chk_histag,
@@ -613,6 +660,9 @@ class ExperimentSetupView(QScrollArea):
     def _set_combo_text(self, combo: QComboBox, value: str) -> None:
         text = str(value or "").strip()
         if not text:
+            combo.setCurrentIndex(0)
+            if combo.isEditable():
+                combo.setEditText("")
             return
         idx = combo.findText(text)
         if idx >= 0:
@@ -632,9 +682,46 @@ class ExperimentSetupView(QScrollArea):
         self.set_fields_enabled(self._editable_widgets, plan_enabled)
         self.set_fields_enabled(self._system_widgets, False if locked else True)
         self.alter_btn.setEnabled(locked)
+        self._refresh_instruction_field_styles()
+
+    def _apply_instruction_visibility(self) -> None:
+        visible = get_visible_instruction_fields(self._experiment_type_id)
+        shown_containers: set[int] = set()
+        for key, container in self._field_containers.items():
+            if id(container) in shown_containers:
+                continue
+            should_show = any(visible.get(mapped_key, True) for mapped_key, mapped_container in self._field_containers.items() if mapped_container is container)
+            container.setVisible(should_show)
+            shown_containers.add(id(container))
+
+    def _clear_instruction_feedback(self) -> None:
+        for label in self._field_error_labels.values():
+            label.clear()
+            label.hide()
+        self._instruction_validation_state = InstructionValidationResult(can_enter_instructions=True)
+        self._refresh_instruction_field_styles()
+
+    def _refresh_instruction_field_styles(self) -> None:
+        highlighted = set(self._instruction_validation_state.highlighted_fields)
+        for key, widget in self._field_widgets.items():
+            has_error = key in highlighted
+            if isinstance(widget, QLineEdit):
+                widget.setStyleSheet(_input_style(error=has_error) if widget.isEnabled() else _input_readonly_style())
+            elif isinstance(widget, QComboBox):
+                widget.setStyleSheet(_combo_style(error=has_error))
+
+    def apply_instruction_validation(self, result: InstructionValidationResult | None) -> None:
+        self._instruction_validation_state = result or InstructionValidationResult(can_enter_instructions=True)
+        for key, label in self._field_error_labels.items():
+            message = self._instruction_validation_state.inline_errors.get(key, "")
+            label.setText(message)
+            label.setVisible(bool(message))
+        self._refresh_instruction_field_styles()
 
     def set_experiment_type(self, experiment_type_id: str) -> None:
         self._experiment_type_id = str(experiment_type_id or "pre_test")
+        self._apply_instruction_visibility()
+        self._clear_instruction_feedback()
 
     def set_excitation_color(self, color: str) -> None:
         self._excitation_color = str(color or "RED").upper()
@@ -667,6 +754,8 @@ class ExperimentSetupView(QScrollArea):
             or self._experiment_type_id
             or "pre_test"
         )
+        self._apply_instruction_visibility()
+        self._clear_instruction_feedback()
 
     def get_params(self) -> dict:
         """返回当前界面所有参数的字典快照（供其他模块读取）。"""

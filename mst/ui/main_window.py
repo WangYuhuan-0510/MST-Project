@@ -25,6 +25,7 @@ _UNSAVED_EXPERIMENTS_TITLE = "存在未保存实验"
 from mst.core.app_state import AppState
 from mst.core.data_manager import DataManager
 from mst.core.experiment_schema import default_setup_data, get_experiment_type_config, list_experiment_types, normalize_experiment_type_id
+from mst.core.instruction_rules import initialize_plan_data_for_new_experiment, validate_instruction_inputs
 from mst.core.experiments import Experiment
 from .views.welcome_view import WelcomeView
 from .views.session_wizard import SessionWizard
@@ -170,14 +171,27 @@ class MainWindow(QMainWindow):
             self._base_window_title = "PW-MST 实验控制平台"
         self._refresh_window_title()
 
+    def _set_experiment_dirty_indicator(self, experiment_id: str, dirty: bool) -> None:
+        exp_id = str(experiment_id or "").strip()
+        if not exp_id:
+            return
+        if self.project_view is None:
+            return
+        if self._refresh_single_sidebar_experiment(exp_id):
+            return
+        self._refresh_sidebar_experiments()
+
     def _mark_dirty(self, experiment_id: str, dirty: bool = True) -> None:
         exp_id = str(experiment_id or "").strip()
         if not exp_id:
             return
         state = self._ensure_session_state(exp_id)
+        if state.is_dirty == bool(dirty):
+            self._refresh_window_title()
+            return
         state.is_dirty = bool(dirty)
         self._refresh_window_title()
-        self._refresh_sidebar_experiments()
+        self._set_experiment_dirty_indicator(exp_id, state.is_dirty)
 
     def _apply_setup_lock_state(self) -> None:
         if self.project_view is None or not self.current_experiment_id:
@@ -746,7 +760,10 @@ class MainWindow(QMainWindow):
         self.current_experiment_type = str(name_by_id.get(self.current_experiment_type_id, "Pre-test"))
 
         self.state.current_session.experiment_type_id = self.current_experiment_type_id
-        self.state.current_session.setup_data = default_setup_data(self.current_experiment_type_id)
+        self.state.current_session.setup_data = initialize_plan_data_for_new_experiment(
+            self.current_experiment_type_id,
+            default_setup_data(self.current_experiment_type_id),
+        )
 
         pv = self._ensure_project_view()
         setup_view = pv.content.stack.widget(0)
@@ -754,6 +771,12 @@ class MainWindow(QMainWindow):
         if hasattr(setup_view, "set_experiment_type"):
             setup_view.set_experiment_type(self.current_experiment_type_id)
             setup_view.set_plan_lock_state(locked=False, allow_plan_edit=False)
+        if hasattr(setup_view, "set_data"):
+            setup_view.set_data(self.state.current_session.setup_data)
+        if hasattr(setup_view, "apply_instruction_validation"):
+            setup_view.apply_instruction_validation(
+                validate_instruction_inputs(self.current_experiment_type_id, self.state.current_session.setup_data)
+            )
         if hasattr(setup_view, "set_excitation_color"):
             setup_view.set_excitation_color(self.current_excitation)
 
