@@ -25,7 +25,7 @@ _UNSAVED_EXPERIMENTS_TITLE = "存在未保存实验"
 from mst.core.app_state import AppState
 from mst.core.data_manager import DataManager
 from mst.core.experiment_schema import default_setup_data, get_experiment_type_config, list_experiment_types, normalize_experiment_type_id
-from mst.core.instruction_rules import initialize_plan_data_for_new_experiment
+from mst.core.instruction_rules import initialize_plan_data_for_new_experiment, validate_instruction_inputs
 from mst.core.instruction_state_service import resolve_instruction_page_state
 from mst.core.experiments import Experiment
 from .views.welcome_view import WelcomeView
