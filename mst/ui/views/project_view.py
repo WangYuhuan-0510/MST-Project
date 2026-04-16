@@ -188,52 +188,61 @@ class InstructionsPage(QScrollArea):
     def show_missing_inputs(self, missing_fields: list[str]) -> None:
         self._clear_dynamic_content()
 
-        card = QFrame()
-        card.setStyleSheet(
-            f"background: {PALETTE['bg_card']};"
-            f"border: 1px solid {PALETTE['required_glow']};"
-            "border-radius: 12px;"
-        )
-        layout = QVBoxLayout(card)
-        layout.setContentsMargins(22, 20, 22, 20)
-        layout.setSpacing(12)
+        shell = QWidget()
+        shell_layout = QVBoxLayout(shell)
+        shell_layout.setContentsMargins(0, 0, 0, 0)
+        shell_layout.setSpacing(0)
+        shell_layout.addStretch()
+
+        center = QWidget()
+        center.setMaximumWidth(760)
+        center_layout = QVBoxLayout(center)
+        center_layout.setContentsMargins(24, 12, 24, 12)
+        center_layout.setSpacing(18)
+        center_layout.setAlignment(Qt.AlignHCenter)
 
         title = QLabel("Missing Input")
+        title.setAlignment(Qt.AlignCenter)
+        title.setMinimumHeight(64)
         title.setStyleSheet(
-            f"color: {PALETTE['text_primary']}; font-size: 18px; font-weight: 700;"
+            f"color: {PALETTE['text_primary']}; font-size: 34px; font-weight: 800; padding: 6px 0 10px 0;"
         )
-        body = QLabel("Please complete the required Plan fields before entering Instructions.")
-        body.setWordWrap(True)
-        body.setStyleSheet(f"color: {PALETTE['text_secondary']}; font-size: 13px;")
-        layout.addWidget(title)
-        layout.addWidget(body)
 
-        for label in missing_fields:
-            item = QLabel(f"• {label}")
-            item.setStyleSheet(f"color: {PALETTE['text_primary']}; font-size: 13px; font-weight: 600;")
-            layout.addWidget(item)
+        body = QLabel("Please complete the required Plan fields before entering Instructions.")
+        body.setAlignment(Qt.AlignCenter)
+        body.setWordWrap(True)
+        body.setMinimumHeight(72)
+        body.setStyleSheet(
+            f"color: {PALETTE['text_secondary']}; font-size: 18px; padding: 4px 0 8px 0;"
+        )
+
+        center_layout.addWidget(title)
+        center_layout.addWidget(body)
 
         btn = QPushButton("Go to Plan")
         btn.setCursor(Qt.PointingHandCursor)
-        btn.setFixedHeight(34)
+        btn.setFixedHeight(46)
+        btn.setMinimumWidth(220)
         btn.setStyleSheet(f"""
             QPushButton {{
                 background: {PALETTE['accent_dim']};
                 border: none;
-                border-radius: 8px;
+                border-radius: 10px;
                 color: #FFFFFF;
-                font-size: 13px;
-                font-weight: 600;
-                padding: 0 16px;
+                font-size: 18px;
+                font-weight: 700;
+                padding: 0 28px;
             }}
             QPushButton:hover {{ background: {PALETTE['accent']}; }}
             QPushButton:pressed {{ background: {PALETTE['accent_dim']}; }}
         """)
         btn.clicked.connect(self._handle_go_to_plan)
-        layout.addWidget(btn, 0, Qt.AlignLeft)
+        center_layout.addWidget(btn, 0, Qt.AlignHCenter)
 
-        self._layout.addWidget(card)
-        self._layout.addStretch()
+        shell_layout.addWidget(center, 0, Qt.AlignCenter)
+        shell_layout.addStretch()
+
+        self._layout.addWidget(shell)
 
     def show_instruction_content(self, content: InstructionContent) -> None:
         self._clear_dynamic_content()

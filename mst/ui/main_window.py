@@ -117,6 +117,8 @@ class MainWindow(QMainWindow):
             instructions_view = self.project_view.content.stack.widget(1)
             if hasattr(instructions_view, "set_go_to_plan_callback"):
                 instructions_view.set_go_to_plan_callback(lambda: self.project_view.content.tab_bar._select(0))
+            if hasattr(setup_view := self.project_view.content.stack.widget(0), "go_to_instructions_requested"):
+                setup_view.go_to_instructions_requested.connect(lambda: self.project_view.content.tab_bar._select(1))
             self._bind_plan_autosave()
         return self.project_view
 
@@ -583,6 +585,7 @@ class MainWindow(QMainWindow):
             if hasattr(setup_view, "apply_instruction_validation"):
                 setup_view.apply_instruction_validation(validation)
             if validation.can_enter_instructions:
+                self._capture_current_plan_snapshot(mark_dirty=False)
                 if hasattr(instructions_view, "show_instruction_content"):
                     instructions_view.show_instruction_content(
                         build_instruction_content(self.current_experiment_type_id, plan_data)
@@ -591,6 +594,7 @@ class MainWindow(QMainWindow):
                 missing_labels = [validation.inline_errors.get(key) or key for key in validation.missing_fields]
                 if hasattr(instructions_view, "show_missing_inputs"):
                     instructions_view.show_missing_inputs(missing_labels)
+            self._apply_setup_lock_state()
             return
 
         if idx == 2:
@@ -598,6 +602,10 @@ class MainWindow(QMainWindow):
             self._save_experiment_by_id(self.current_experiment_id)
             self._set_lifecycle_status(self.current_experiment_id, "prepared")
             self._refresh_sidebar_experiments()
+            return
+
+        if idx == 0:
+            self._apply_setup_lock_state()
 
     def _load_experiment_from_id(self, experiment_id: str) -> None:
         if self.project_view is None:
@@ -1012,6 +1020,10 @@ class MainWindow(QMainWindow):
             self._refresh_sidebar_experiments()
             pv.select_experiment(self.current_experiment_id)
             pv.update_metadata({**dict(exp.metadata or {}), **dict(exp.setup_data or {}), **dict(exp.protocol or {})})
+
+            current_tab_idx = pv.content.tab_bar.current_index()
+            if current_tab_idx == 1:
+                self._on_project_tab_changed(1)
 
             self.current_excitation = str(exp.metadata.get("excitation", self.current_excitation) or self.current_excitation)
             self.current_experiment_type = str(exp.metadata.get("experiment_type", self.current_experiment_type) or self.current_experiment_type)
