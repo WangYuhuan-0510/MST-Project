@@ -66,7 +66,7 @@ class ExperimentItem(QPushButton):
 
         number_frame = QFrame()
         number_frame.setObjectName("numberFrame")
-        number_frame.setFixedWidth(48)
+        number_frame.setFixedWidth(30)
         number_layout = QVBoxLayout(number_frame)
         number_layout.setContentsMargins(0, 0, 0, 0)
         number_layout.setSpacing(0)
@@ -79,7 +79,7 @@ class ExperimentItem(QPushButton):
         order_lbl.setStyleSheet(
             f"color: {PALETTE['text_primary']};"
             "background: transparent;"
-            "font-size: 24px;"
+            "font-size: 22px;"
             "font-weight: 500;"
         )
         number_layout.addWidget(order_lbl, 0, Qt.AlignCenter)
@@ -119,7 +119,7 @@ class ExperimentItem(QPushButton):
         type_lbl.setStyleSheet(
             f"color: {PALETTE['text_secondary']};"
             "background: transparent;"
-            "font-size: 15px;"
+            "font-size: 14px;"
             "font-weight: 500;"
         )
 
