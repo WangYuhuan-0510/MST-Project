@@ -24,6 +24,7 @@ from .ui_style import (
     PALETTE, SIDEBAR_W,
     label_style, section_label, divider,
 )
+from mst.core.instruction_rules import InstructionContent
 from mst.core.experiment_schema import get_experiment_type_config, normalize_experiment_type_id
 
 # ── 页面实现 ────────────────────────────────────────────────────────────────
@@ -168,27 +169,104 @@ class InstructionsPage(QScrollArea):
         self.setWidgetResizable(True)
         self.setStyleSheet(f"background: {PALETTE['bg_main']};")
 
+        self._go_to_plan_callback = None
+
         inner = QWidget()
         inner.setStyleSheet(f"background: {PALETTE['bg_main']};")
         self.setWidget(inner)
-        vl = QVBoxLayout(inner)
-        vl.setContentsMargins(28, 28, 28, 28)
-        vl.setSpacing(16)
+        self._layout = QVBoxLayout(inner)
+        self._layout.setContentsMargins(28, 28, 28, 28)
+        self._layout.setSpacing(16)
 
-        vl.addWidget(section_label("INSTRUCTIONS"))
+        self._section_label = section_label("INSTRUCTIONS")
+        self._layout.addWidget(self._section_label)
+        self._render_default_content()
 
-        for i, (title, body) in enumerate([
-            ("Prepare Materials",
-             "Gather all equipment and reagents before starting. Check calibration dates."),
-            ("Configure Environment",
-             "Set temperature, humidity, and lighting to values specified in the Plan."),
-            ("Run Protocol",
-             "Follow the protocol in sequence. Record any deviations in real time."),
-            ("Collect Data",
-             "Export raw data immediately after each trial using the agreed file convention."),
-            ("Clean Up",
-             "Dispose of waste per lab safety guidelines and log the completion time."),
-        ], 1):
+    def set_go_to_plan_callback(self, callback) -> None:
+        self._go_to_plan_callback = callback
+
+    def show_missing_inputs(self, missing_fields: list[str]) -> None:
+        self._clear_dynamic_content()
+
+        card = QFrame()
+        card.setStyleSheet(
+            f"background: {PALETTE['bg_card']};"
+            f"border: 1px solid {PALETTE['required_glow']};"
+            "border-radius: 12px;"
+        )
+        layout = QVBoxLayout(card)
+        layout.setContentsMargins(22, 20, 22, 20)
+        layout.setSpacing(12)
+
+        title = QLabel("Missing Input")
+        title.setStyleSheet(
+            f"color: {PALETTE['text_primary']}; font-size: 18px; font-weight: 700;"
+        )
+        body = QLabel("Please complete the required Plan fields before entering Instructions.")
+        body.setWordWrap(True)
+        body.setStyleSheet(f"color: {PALETTE['text_secondary']}; font-size: 13px;")
+        layout.addWidget(title)
+        layout.addWidget(body)
+
+        for label in missing_fields:
+            item = QLabel(f"• {label}")
+            item.setStyleSheet(f"color: {PALETTE['text_primary']}; font-size: 13px; font-weight: 600;")
+            layout.addWidget(item)
+
+        btn = QPushButton("Go to Plan")
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.setFixedHeight(34)
+        btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {PALETTE['accent_dim']};
+                border: none;
+                border-radius: 8px;
+                color: #FFFFFF;
+                font-size: 13px;
+                font-weight: 600;
+                padding: 0 16px;
+            }}
+            QPushButton:hover {{ background: {PALETTE['accent']}; }}
+            QPushButton:pressed {{ background: {PALETTE['accent_dim']}; }}
+        """)
+        btn.clicked.connect(self._handle_go_to_plan)
+        layout.addWidget(btn, 0, Qt.AlignLeft)
+
+        self._layout.addWidget(card)
+        self._layout.addStretch()
+
+    def show_instruction_content(self, content: InstructionContent) -> None:
+        self._clear_dynamic_content()
+
+        title = QLabel(content.title)
+        title.setStyleSheet(
+            f"color: {PALETTE['text_primary']}; font-size: 20px; font-weight: 700;"
+        )
+        self._layout.addWidget(title)
+
+        if content.summary:
+            summary_card = QFrame()
+            summary_card.setStyleSheet(
+                f"background: {PALETTE['bg_card']};"
+                f"border: 1px solid {PALETTE['border']};"
+                "border-radius: 10px;"
+            )
+            summary_layout = QGridLayout(summary_card)
+            summary_layout.setContentsMargins(18, 16, 18, 16)
+            summary_layout.setHorizontalSpacing(24)
+            summary_layout.setVerticalSpacing(10)
+            for idx, (label, value) in enumerate(content.summary):
+                key_lbl = QLabel(label)
+                key_lbl.setStyleSheet(f"color: {PALETTE['text_muted']}; font-size: 12px; font-weight: 700;")
+                val_lbl = QLabel(value)
+                val_lbl.setStyleSheet(f"color: {PALETTE['text_primary']}; font-size: 13px; font-weight: 600;")
+                row = idx // 2
+                col = (idx % 2) * 2
+                summary_layout.addWidget(key_lbl, row, col)
+                summary_layout.addWidget(val_lbl, row, col + 1)
+            self._layout.addWidget(summary_card)
+
+        for idx, step in enumerate(content.steps, 1):
             frame = QFrame()
             frame.setStyleSheet(
                 f"background: {PALETTE['bg_card']};"
@@ -199,7 +277,7 @@ class InstructionsPage(QScrollArea):
             hl.setContentsMargins(20, 16, 20, 16)
             hl.setSpacing(16)
 
-            num = QLabel(str(i))
+            num = QLabel(str(idx))
             num.setFixedSize(28, 28)
             num.setAlignment(Qt.AlignCenter)
             num.setStyleSheet(
@@ -207,23 +285,55 @@ class InstructionsPage(QScrollArea):
                 " color: #FFFFFF; font-size: 12px; font-weight: 700;"
             )
 
-            inner_vl = QVBoxLayout()
-            inner_vl.setSpacing(4)
-            t = QLabel(title)
-            t.setStyleSheet(
-                f"color: {PALETTE['text_primary']}; font-size: 14px; font-weight: 600;"
-            )
-            b = QLabel(body)
-            b.setWordWrap(True)
-            b.setStyleSheet(f"color: {PALETTE['text_secondary']}; font-size: 13px;")
-            inner_vl.addWidget(t)
-            inner_vl.addWidget(b)
+            text = QLabel(step)
+            text.setWordWrap(True)
+            text.setStyleSheet(f"color: {PALETTE['text_secondary']}; font-size: 13px;")
 
             hl.addWidget(num, 0, Qt.AlignTop)
-            hl.addLayout(inner_vl)
-            vl.addWidget(frame)
+            hl.addWidget(text, 1)
+            self._layout.addWidget(frame)
 
-        vl.addStretch()
+        if content.notes:
+            notes_card = QFrame()
+            notes_card.setStyleSheet(
+                f"background: {PALETTE['bg_card']};"
+                f"border: 1px dashed {PALETTE['border']};"
+                "border-radius: 10px;"
+            )
+            notes_layout = QVBoxLayout(notes_card)
+            notes_layout.setContentsMargins(18, 16, 18, 16)
+            notes_layout.setSpacing(8)
+            notes_title = QLabel("Notes")
+            notes_title.setStyleSheet(f"color: {PALETTE['text_primary']}; font-size: 14px; font-weight: 700;")
+            notes_layout.addWidget(notes_title)
+            for note in content.notes:
+                note_lbl = QLabel(f"• {note}")
+                note_lbl.setWordWrap(True)
+                note_lbl.setStyleSheet(f"color: {PALETTE['text_secondary']}; font-size: 13px;")
+                notes_layout.addWidget(note_lbl)
+            self._layout.addWidget(notes_card)
+
+        self._layout.addStretch()
+
+    def _handle_go_to_plan(self) -> None:
+        if callable(self._go_to_plan_callback):
+            self._go_to_plan_callback()
+
+    def _clear_dynamic_content(self) -> None:
+        while self._layout.count() > 1:
+            item = self._layout.takeAt(1)
+            widget = item.widget()
+            if widget is not None:
+                widget.deleteLater()
+
+    def _render_default_content(self) -> None:
+        self._clear_dynamic_content()
+
+        hint = QLabel("Instructions will appear here after Plan validation passes.")
+        hint.setWordWrap(True)
+        hint.setStyleSheet(f"color: {PALETTE['text_secondary']}; font-size: 13px;")
+        self._layout.addWidget(hint)
+        self._layout.addStretch()
 
 
 # ─────────────────────────────────────────────

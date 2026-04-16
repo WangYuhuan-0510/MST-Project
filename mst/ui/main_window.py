@@ -25,7 +25,7 @@ _UNSAVED_EXPERIMENTS_TITLE = "存在未保存实验"
 from mst.core.app_state import AppState
 from mst.core.data_manager import DataManager
 from mst.core.experiment_schema import default_setup_data, get_experiment_type_config, list_experiment_types, normalize_experiment_type_id
-from mst.core.instruction_rules import initialize_plan_data_for_new_experiment, validate_instruction_inputs
+from mst.core.instruction_rules import initialize_plan_data_for_new_experiment, validate_instruction_inputs, build_instruction_content
 from mst.core.experiments import Experiment
 from .views.welcome_view import WelcomeView
 from .views.session_wizard import SessionWizard
@@ -114,6 +114,9 @@ class MainWindow(QMainWindow):
             self.project_view.sidebar.experiment_rename_requested.connect(self._on_experiment_rename_requested)
             self.project_view.sidebar.experiment_delete_requested.connect(self._on_experiment_delete_requested)
             self.project_view.content.tab_bar.page_changed.connect(self._on_project_tab_changed)
+            instructions_view = self.project_view.content.stack.widget(1)
+            if hasattr(instructions_view, "set_go_to_plan_callback"):
+                instructions_view.set_go_to_plan_callback(lambda: self.project_view.content.tab_bar._select(0))
             self._bind_plan_autosave()
         return self.project_view
 
@@ -568,9 +571,29 @@ class MainWindow(QMainWindow):
         return True
 
     def _on_project_tab_changed(self, idx: int) -> None:
-        if not self.current_experiment_id:
+        if not self.current_experiment_id or self.project_view is None:
             return
-        if idx in (1, 2):
+
+        setup_view = self.project_view.content.stack.widget(0)
+        instructions_view = self.project_view.content.stack.widget(1)
+
+        if idx == 1:
+            plan_data = dict(setup_view.get_params() or {}) if hasattr(setup_view, "get_params") else {}
+            validation = validate_instruction_inputs(self.current_experiment_type_id, plan_data)
+            if hasattr(setup_view, "apply_instruction_validation"):
+                setup_view.apply_instruction_validation(validation)
+            if validation.can_enter_instructions:
+                if hasattr(instructions_view, "show_instruction_content"):
+                    instructions_view.show_instruction_content(
+                        build_instruction_content(self.current_experiment_type_id, plan_data)
+                    )
+            else:
+                missing_labels = [validation.inline_errors.get(key) or key for key in validation.missing_fields]
+                if hasattr(instructions_view, "show_missing_inputs"):
+                    instructions_view.show_missing_inputs(missing_labels)
+            return
+
+        if idx == 2:
             self._capture_current_plan_snapshot()
             self._save_experiment_by_id(self.current_experiment_id)
             self._set_lifecycle_status(self.current_experiment_id, "prepared")
