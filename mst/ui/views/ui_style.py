@@ -30,7 +30,7 @@ PALETTE: dict[str, str] = {
     "warning":        "#B06A00",   # 警告橙
 }
 
-SIDEBAR_W = 300
+SIDEBAR_W = 265
 
 # ─────────────────────────────────────────────
 #  Reusable stylesheet fragments

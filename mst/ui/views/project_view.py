@@ -385,6 +385,7 @@ class _InfoBlock(QWidget):
                  min_w: int = 140, parent=None):
         super().__init__(parent)
         self.setMinimumWidth(min_w)
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self.setStyleSheet("background: transparent;")
 
         lo = QHBoxLayout(self)
@@ -408,15 +409,17 @@ class _InfoBlock(QWidget):
         )
 
         self._value_lbl = QLabel(value)
+        self._value_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self._value_lbl.setMinimumWidth(0)
         self._value_lbl.setStyleSheet(
-            f"color: {PALETTE['text_primary']}; font-size: 14px; font-weight: 700;"
+            f"color: {PALETTE['text_primary']}; font-size: 13px; font-weight: 700;"
         )
 
         text_blk.addWidget(self._label_lbl)
         text_blk.addWidget(self._value_lbl)
 
         lo.addWidget(icon_lbl)
-        lo.addLayout(text_blk)
+        lo.addLayout(text_blk, 1)
 
     def set_value(self, value: str) -> None:
         self._value_lbl.setText(value)
@@ -447,12 +450,12 @@ class DataPanel(QFrame):
         root.setSpacing(0)
 
         # ── 四个信息块，用竖分隔线隔开 ──────────────────────────────
-        self._blk_target  = _InfoBlock("◕", "分析物",  "—",  160)
-        self._blk_ligand  = _InfoBlock("◆", "配体",    "—",  160)
-        self._blk_buf     = _InfoBlock("⬛", "缓冲液",  "—",  200)
-        self._blk_cap     = _InfoBlock("▮", "毛细管",   "—",  180)
-        self._blk_excit   = _InfoBlock("☀", "激发光功率", "—", 160)
-        self._blk_mst     = _InfoBlock("✳", "MST 功率",  "—", 140)
+        self._blk_target = _InfoBlock("◕", "分析物", "—", 150)
+        self._blk_ligand = _InfoBlock("◆", "配体", "—", 150)
+        self._blk_buf = _InfoBlock("⬛", "缓冲液", "—", 280)
+        self._blk_cap = _InfoBlock("▮", "毛细管", "—", 220)
+        self._blk_excit = _InfoBlock("☀", "激发光功率", "—", 240)
+        self._blk_mst = _InfoBlock("✳", "MST 功率", "—", 120)
 
         for blk in [self._blk_target, self._blk_ligand,
                     self._blk_buf, self._blk_cap,
@@ -499,9 +502,8 @@ class DataPanel(QFrame):
         self._blk_ligand.set_value(hi_conc + " µM" if hi_conc != "—" else "—")
 
         buf = params.get("buffer", "—") or "—"
-        # 缓冲液文本可能很长，截断显示
         self._blk_buf.set_label("缓冲液")
-        self._blk_buf.set_value(buf[:28] + "…" if len(buf) > 28 else buf)
+        self._blk_buf.set_value(buf)
 
         cap = params.get("capillary", "—") or "—"
         # 只显示型号关键词
