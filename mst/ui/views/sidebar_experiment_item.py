@@ -155,7 +155,6 @@ class ExperimentItem(QPushButton):
         top_row.addWidget(icon_holder, 0, Qt.AlignVCenter)
         top_row.addWidget(type_lbl, 1, Qt.AlignVCenter)
         top_row.addWidget(dirty_mark, 0, Qt.AlignVCenter)
-        top_row.addWidget(status_dot, 0, Qt.AlignVCenter)
         top_row.addWidget(self.delete_btn, 0, Qt.AlignVCenter)
 
         divider = QFrame()
