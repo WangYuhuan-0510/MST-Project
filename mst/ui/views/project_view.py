@@ -160,7 +160,7 @@ class PageTabBar(QWidget):
 
 
 # ─────────────────────────────────────────────
-#  Instructions page  （占位，可按需替换为真实实现）
+#  Instructions page  
 # ─────────────────────────────────────────────
 class InstructionsPage(QScrollArea):
     def __init__(self, parent=None):
@@ -689,9 +689,7 @@ class ContentArea(QWidget):
 
         # 右侧独立空白区：与实验设置同层并排，不覆盖内容
         self.right_blank_panel = QFrame()
-        self.right_blank_panel.setMinimumWidth(220)
-        self.right_blank_panel.setMaximumWidth(320)
-        self.right_blank_panel.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        self.right_blank_panel.setFixedWidth(260)
         self.right_blank_panel.setStyleSheet(
             f"background: {PALETTE['bg_sidebar']};"
             f"border-left: 1px solid {PALETTE['border']};"

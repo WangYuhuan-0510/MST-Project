@@ -121,69 +121,124 @@ def _required_selection(key: str) -> InstructionFieldRule:
     )
 
 
+def _format_yes_no(value: Any) -> str:
+    return "Yes" if bool(value) else "No"
+
+
 def build_pretest_instructions(plan_data: PlanData) -> InstructionContent:
+    target = _format_value(plan_data.get("target"))
+    target_stock = _format_with_unit(plan_data.get("target_stock"), plan_data.get("target_stock_unit"))
+    assay = _format_value(plan_data.get("target_assay"))
+    buffer = _format_value(plan_data.get("buffer"))
+    capillary = _format_value(plan_data.get("capillary"))
+    excitation = _format_value(plan_data.get("excitation"))
+    mst_power = _format_value(plan_data.get("mst_power"))
+
     return InstructionContent(
         title="Pretest Instructions",
         summary=[
-            ("Target", _format_value(plan_data.get("target"))),
-            ("Target stock", _format_with_unit(plan_data.get("target_stock"), plan_data.get("target_stock_unit"))),
-            ("Capillary", _format_value(plan_data.get("capillary"))),
-            ("Buffer", _format_value(plan_data.get("buffer"))),
+            ("Experiment Type", "Pretest"),
+            ("Target", target),
+            ("Target stock", target_stock),
+            ("Assay concentration", assay),
+            ("Buffer", buffer),
+            ("Capillary", capillary),
+            ("Excitation", excitation),
+            ("MST power", mst_power),
         ],
         steps=[
-            "Prepare the target sample using the configured target stock concentration.",
-            "Load the prepared sample into the selected capillary and keep ligand excluded for pretest.",
-            "Run the pretest with the current buffer, excitation, and MST settings.",
-            "Review fluorescence quality before moving to downstream workflows.",
+            f"Calculate the minimum required stock solution and buffer volumes using {target_stock} target stock and {buffer} as assay buffer.",
+            f"Prepare the intermediate sample from the configured target stock ({target_stock}). Use the assay concentration ({assay}) directly if no predilution is required.",
+            f"Prepare the assay sample in {buffer}, keeping ligand excluded for this pretest workflow.",
+            f"Dip {capillary} capillaries into the assay sample, place them into the device tray, and start the pretest measurement.",
+            "Review fluorescence quality, adsorption risk, and baseline signal stability before moving on to interaction experiments.",
         ],
         notes=[
-            "Ligand-related settings stay hidden in Pre-test mode.",
-            "If fluorescence is unstable, revisit buffer and capillary selection in Plan.",
+            "Pretest is used to confirm that the labeled target behaves well before any ligand is introduced.",
+            f"Use the configured excitation ({excitation}) and MST power ({mst_power}) as the starting instrument settings.",
         ],
     )
 
 
 def build_binding_test_instructions(plan_data: PlanData) -> InstructionContent:
+    target = _format_value(plan_data.get("target"))
+    ligand = _format_value(plan_data.get("ligand"))
+    target_stock = _format_with_unit(plan_data.get("target_stock"), plan_data.get("target_stock_unit"))
+    ligand_stock = _format_with_unit(plan_data.get("lig_stock"), plan_data.get("lig_stock_unit"))
+    buffer = _format_value(plan_data.get("buffer"))
+    capillary = _format_value(plan_data.get("capillary"))
+    excitation = _format_value(plan_data.get("excitation"))
+    mst_power = _format_value(plan_data.get("mst_power"))
+    ligand_in_dmso = _format_yes_no(plan_data.get("lig_in_dmso"))
+
     return InstructionContent(
         title="Binding Check Instructions",
         summary=[
-            ("Target", _format_value(plan_data.get("target"))),
-            ("Ligand", _format_value(plan_data.get("ligand"))),
-            ("Target stock", _format_with_unit(plan_data.get("target_stock"), plan_data.get("target_stock_unit"))),
-            ("Ligand stock", _format_with_unit(plan_data.get("lig_stock"), plan_data.get("lig_stock_unit"))),
-            ("Capillary", _format_value(plan_data.get("capillary"))),
+            ("Experiment Type", "Binding Check"),
+            ("Target", target),
+            ("Ligand", ligand),
+            ("Target stock", target_stock),
+            ("Ligand stock", ligand_stock),
+            ("Buffer", buffer),
+            ("Capillary", capillary),
+            ("Ligand in DMSO", ligand_in_dmso),
+            ("Excitation", excitation),
+            ("MST power", mst_power),
         ],
         steps=[
-            "Prepare target and ligand stock solutions according to the configured concentrations.",
-            "Set the ligand high concentration and prepare the binding-check mixtures.",
-            "Load the mixtures into the selected capillary and execute the binding check workflow.",
-            "Compare response separation between ligand-present and ligand-absent conditions.",
+            f"Calculate the minimum required target stock, ligand stock, and buffer volumes using {target_stock}, {ligand_stock}, and {buffer}.",
+            f"Prepare the intermediate samples for {target} and {ligand}. Set up a target-only control sample and a target-plus-ligand complex sample.",
+            f"If the ligand stock is prepared in DMSO, keep the solvent fraction matched between the control and complex samples.",
+            f"Prepare the final assay samples in {buffer}, then load them into {capillary} capillaries.",
+            f"Run the Binding Check measurement using excitation {excitation} and MST power {mst_power}, then compare target-only and complex responses.",
         ],
         notes=[
-            "Use this run to confirm whether a measurable interaction is present before affinity fitting.",
+            "Binding Check is a qualitative experiment used to verify whether a measurable interaction signal is present.",
+            "If no clear separation is observed, revisit Plan and adjust ligand concentration, buffer, capillary type, or labeling conditions.",
         ],
     )
 
 
 def build_binding_affinity_instructions(plan_data: PlanData) -> InstructionContent:
+    target = _format_value(plan_data.get("target"))
+    ligand = _format_value(plan_data.get("ligand"))
+    target_stock = _format_with_unit(plan_data.get("target_stock"), plan_data.get("target_stock_unit"))
+    ligand_stock = _format_with_unit(plan_data.get("lig_stock"), plan_data.get("lig_stock_unit"))
+    high_conc = _format_with_unit(plan_data.get("hi_conc"), plan_data.get("lig_stock_unit"))
+    estimated_kd = _format_with_unit(plan_data.get("kd_estimated"), plan_data.get("kd_unit"))
+    buffer = _format_value(plan_data.get("buffer"))
+    capillary = _format_value(plan_data.get("capillary"))
+    excitation = _format_value(plan_data.get("excitation"))
+    mst_power = _format_value(plan_data.get("mst_power"))
+    ligand_in_dmso = _format_yes_no(plan_data.get("lig_in_dmso"))
+
     return InstructionContent(
         title="Binding Affinity Instructions",
         summary=[
-            ("Target", _format_value(plan_data.get("target"))),
-            ("Ligand", _format_value(plan_data.get("ligand"))),
-            ("Target stock", _format_with_unit(plan_data.get("target_stock"), plan_data.get("target_stock_unit"))),
-            ("Ligand stock", _format_with_unit(plan_data.get("lig_stock"), plan_data.get("lig_stock_unit"))),
-            ("High concentration", _format_with_unit(plan_data.get("hi_conc"), plan_data.get("lig_stock_unit"))),
-            ("Capillary", _format_value(plan_data.get("capillary"))),
+            ("Experiment Type", "Binding Affinity"),
+            ("Target", target),
+            ("Ligand", ligand),
+            ("Target stock", target_stock),
+            ("Ligand stock", ligand_stock),
+            ("High concentration", high_conc),
+            ("Estimated Kd", estimated_kd),
+            ("Buffer", buffer),
+            ("Capillary", capillary),
+            ("Ligand in DMSO", ligand_in_dmso),
+            ("Excitation", excitation),
+            ("MST power", mst_power),
         ],
         steps=[
-            "Prepare a ligand titration series from the configured high concentration.",
-            "Keep the target concentration constant across all titration points.",
-            "Load all mixtures into the selected capillary and run the affinity workflow.",
-            "Fit the resulting response curve to estimate binding affinity.",
+            f"Calculate the minimum required target stock, ligand stock, and buffer volumes using {target_stock}, {ligand_stock}, and a highest ligand concentration of {high_conc}.",
+            f"Prepare the intermediate samples for {target} and {ligand}. If needed, predilute the target to a suitable working concentration before mixing.",
+            f"Prepare a serial dilution of the ligand starting from {high_conc}, using matched ligand buffer for the full dilution series.",
+            f"Add the target sample to each ligand dilution point, mix thoroughly, and keep the final assay conditions consistent across the full series.",
+            f"Load all samples into {capillary} capillaries and run the Binding Affinity measurement using excitation {excitation} and MST power {mst_power}.",
+            "Fit the resulting binding curve and review whether the concentration range properly spans the transition region.",
         ],
         notes=[
-            "Estimated Kd is optional but helps choose a sensible ligand concentration range.",
+            "Binding Affinity is intended for quantitative analysis of the interaction and should be run only after a convincing binding signal is observed.",
+            f"Estimated Kd ({estimated_kd}) is optional, but it is useful for checking whether the selected high concentration is appropriate.",
         ],
     )
 
