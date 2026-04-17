@@ -464,9 +464,9 @@ class ExperimentSetupView(QScrollArea):
         self._capillary_error.setStyleSheet(f"color: {PALETTE['danger']}; font-size: 11px; font-weight: 600;")
         cc.addWidget(self._capillary_error)
         self.cmb_capillary = _editable_combo([
-            "Monolith NT.115 毛细管",
-            "Monolith NT.115 Premium 毛细管",
-            "Monolith NT.自动化毛细管芯片",
+            "Monolith NT.115 Capillary",
+            "Monolith NT.115 Hydrophobic Capillary",
+            "Monolith NT.115 Premium Capillary",
         ], allow_blank=True)
         rc.addWidget(self.cmb_capillary, 1)
         rc.addStretch()
