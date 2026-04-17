@@ -175,11 +175,9 @@ class InstructionsPage(QScrollArea):
         inner.setStyleSheet(f"background: {PALETTE['bg_main']};")
         self.setWidget(inner)
         self._layout = QVBoxLayout(inner)
-        self._layout.setContentsMargins(28, 28, 28, 28)
-        self._layout.setSpacing(16)
+        self._layout.setContentsMargins(28, 18, 28, 28)
+        self._layout.setSpacing(12)
 
-        self._section_label = section_label("INSTRUCTIONS")
-        self._layout.addWidget(self._section_label)
         self._render_default_content()
 
     def set_go_to_plan_callback(self, callback) -> None:
@@ -346,11 +344,6 @@ class InstructionsPage(QScrollArea):
 
     def _render_default_content(self) -> None:
         self._clear_dynamic_content()
-
-        hint = QLabel("Instructions will appear here after Plan validation passes.")
-        hint.setWordWrap(True)
-        hint.setStyleSheet(f"color: {PALETTE['text_secondary']}; font-size: 13px;")
-        self._layout.addWidget(hint)
         self._layout.addStretch()
 
 
