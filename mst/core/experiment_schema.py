@@ -31,6 +31,7 @@ def _base_sections() -> List[SectionConfig]:
                 {"key": "lig_stock", "label": "配体母液浓度", "type": "text", "default": "16"},
                 {"key": "lig_stock_unit", "label": "配体母液浓度单位", "type": "select", "options": ["M", "mM", "µM", "nM", "pM"], "default": "µM"},
                 {"key": "lig_in_dmso", "label": "配体溶于 DMSO", "type": "bool", "default": False},
+                {"key": "check_buffer_auto_fluorescence", "label": "Check for buffer auto-fliorescence", "type": "bool", "default": False},
                 {"key": "hi_conc", "label": "此次实验最高浓度", "type": "text", "default": "2"},
             ],
         },

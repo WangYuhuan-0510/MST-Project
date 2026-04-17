@@ -566,7 +566,7 @@ class DataPanel(QFrame):
         self._blk_excit = _InfoBlock("☀", "激发光功率", "—", 280)
         self._blk_mst = _InfoBlock("✳", "MST 功率", "—", 90)
 
-        blocks = [
+        self._blocks = [
             self._blk_target,
             self._blk_ligand,
             self._blk_buf,
@@ -574,15 +574,22 @@ class DataPanel(QFrame):
             self._blk_excit,
             self._blk_mst,
         ]
+        self._separators: list[QFrame] = []
 
-        for blk in blocks:
+        for blk in self._blocks:
             root.addWidget(blk, 0)
-            root.addWidget(_vsep())
+            sep = _vsep()
+            self._separators.append(sep)
+            root.addWidget(sep)
 
-        # 移除最后一根多余的分隔线
-        item = root.itemAt(root.count() - 1)
-        if item and item.widget():
-            item.widget().hide()
+        if self._separators:
+            self._separators[-1].hide()
+
+        # 默认隐藏配体块；仅非 pre-test 时显示
+        self._blk_ligand.hide()
+        if len(self._separators) >= 2:
+            self._separators[0].hide()
+            self._separators[1].hide()
 
         # ── 每秒刷新 ──────────────────────────────────────────────
         self._timer = QTimer(self)
@@ -611,6 +618,13 @@ class DataPanel(QFrame):
         t_assay = params.get("target_assay", "—") or "—"
         self._blk_target.set_label(target)
         self._blk_target.set_value(t_assay)
+
+        experiment_type_id = normalize_experiment_type_id(str(params.get("experiment_type_id") or params.get("experiment_type") or "pre_test"))
+        show_ligand = experiment_type_id != "pre_test"
+        self._blk_ligand.setVisible(show_ligand)
+        if len(self._separators) >= 2:
+            self._separators[0].setVisible(show_ligand)
+            self._separators[1].setVisible(show_ligand)
 
         ligand   = params.get("ligand", "—")
         hi_conc  = params.get("hi_conc", "—") or "—"
