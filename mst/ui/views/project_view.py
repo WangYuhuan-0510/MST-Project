@@ -240,7 +240,7 @@ class InstructionsPage(QScrollArea):
         shell_layout.addWidget(center, 0, Qt.AlignCenter)
         shell_layout.addStretch()
 
-        self._layout.addWidget(shell)
+        self._layout.addWidget(shell, 1)
 
     def show_instruction_content(self, content: InstructionContent) -> None:
         self._clear_dynamic_content()
