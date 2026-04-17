@@ -114,13 +114,16 @@ def _combo_style(error: bool = False) -> str:
     """
 
 
-def _spinbox_style() -> str:
+def _spinbox_style(disabled: bool = False) -> str:
+    background = PALETTE['bg_hover'] if disabled else PALETTE['bg_card']
+    border = PALETTE['border']
+    text_color = PALETTE['text_muted'] if disabled else PALETTE['text_primary']
     return f"""
         QSpinBox {{
-            background: {PALETTE['bg_card']};
-            border: 1px solid {PALETTE['border']};
+            background: {background};
+            border: 1px solid {border};
             border-radius: 6px;
-            color: {PALETTE['text_primary']};
+            color: {text_color};
             font-size: 13px;
             padding: 4px 30px 4px 8px;
             min-height: 28px;
@@ -183,7 +186,7 @@ def _check_style() -> str:
 
 
 def _help_btn() -> QPushButton:
-    btn = QPushButton("??")
+    btn = QPushButton("?")
     btn.setFixedSize(40, 24)
     btn.setCursor(Qt.PointingHandCursor)
     btn.setStyleSheet(f"""
@@ -192,7 +195,7 @@ def _help_btn() -> QPushButton:
             border: 1px solid {PALETTE['border']};
             border-radius: 5px;
             color: {PALETTE['text_muted']};
-            font-size: 10px;
+            font-size: 13px;
             font-weight: 700;
             padding: 0 6px;
         }}
@@ -433,6 +436,16 @@ class ExperimentSetupView(QScrollArea):
         rb.addWidget(_help_btn())
         bc.addLayout(rb)
 
+        rb2 = QHBoxLayout(); rb2.setSpacing(6)
+        self.chk_buffer_auto_fluorescence = QCheckBox("Check for buffer auto-fliorescence")
+        self.chk_buffer_auto_fluorescence.setStyleSheet(_check_style())
+        rb2.addWidget(self.chk_buffer_auto_fluorescence)
+        rb2.addStretch()
+        self.btn_buffer_auto_fluorescence_help = _help_btn()
+        rb2.addWidget(self.btn_buffer_auto_fluorescence_help)
+        bc.addLayout(rb2)
+        self._buffer_auto_fluorescence_row = rb2
+
         left_col.addWidget(buf_card)
 
         # ── 毛细管 ────────────────────────────────────────────────────────
@@ -451,9 +464,9 @@ class ExperimentSetupView(QScrollArea):
         self._capillary_error.setStyleSheet(f"color: {PALETTE['danger']}; font-size: 11px; font-weight: 600;")
         cc.addWidget(self._capillary_error)
         self.cmb_capillary = _editable_combo([
-            "Monolith NT.115 毛细管",
-            "Monolith NT.115 Premium 毛细管",
-            "Monolith NT.自动化毛细管芯片",
+            "Monolith NT.115 Capillary",
+            "Monolith NT.115 Hydrophobic Capillary",
+            "Monolith NT.115 Premium Capillary",
         ], allow_blank=True)
         rc.addWidget(self.cmb_capillary, 1)
         rc.addStretch()
@@ -523,27 +536,27 @@ class ExperimentSetupView(QScrollArea):
         rl3.addWidget(_help_btn())
         lc.addLayout(rl3)
 
-        rl4 = QHBoxLayout(); rl4.setSpacing(6)
-        rl4.addWidget(_field_lbl("配体缓冲液比例", LABEL_W))
-        self.lbl_lig_buf = _value_lbl("12.5%")
-        rl4.addWidget(self.lbl_lig_buf)
-        rl4.addStretch()
-        rl4.addWidget(_help_btn())
-        lc.addLayout(rl4)
-
         rl5 = QHBoxLayout(); rl5.setSpacing(6)
-        rl5.addWidget(_field_lbl("此次实验最高浓度", LABEL_W))
+        rl5.addWidget(_field_lbl("配体缓冲液比例", LABEL_W))
+        self.lbl_lig_buf = _value_lbl("12.5%")
+        rl5.addWidget(self.lbl_lig_buf)
+        rl5.addStretch()
+        rl5.addWidget(_help_btn())
+        lc.addLayout(rl5)
+
+        rl6 = QHBoxLayout(); rl6.setSpacing(6)
+        rl6.addWidget(_field_lbl("此次实验最高浓度", LABEL_W))
         self.edit_hi_conc = QLineEdit("2")
         self.edit_hi_conc.setFixedWidth(80)
         self.edit_hi_conc.setStyleSheet(_input_style())
         hi_unit = QLabel("µM")
         hi_unit.setStyleSheet(f"color: {PALETTE['text_muted']}; font-size: 12px;")
-        rl5.addWidget(self.edit_hi_conc)
-        rl5.addWidget(hi_unit)
-        rl5.addWidget(_edit_btn())
-        rl5.addStretch()
-        rl5.addWidget(_help_btn())
-        lc.addLayout(rl5)
+        rl6.addWidget(self.edit_hi_conc)
+        rl6.addWidget(hi_unit)
+        rl6.addWidget(_edit_btn())
+        rl6.addStretch()
+        rl6.addWidget(_help_btn())
+        lc.addLayout(rl6)
 
         right_col.addWidget(lig_card)
 
@@ -641,10 +654,12 @@ class ExperimentSetupView(QScrollArea):
             "lig_stock": self._ligand_card,
             "lig_stock_unit": self._ligand_card,
             "lig_in_dmso": self._ligand_card,
+            "check_buffer_auto_fluorescence": buf_card,
             "hi_conc": self._ligand_card,
         }
         self._instruction_validation_state = InstructionValidationResult(can_enter_instructions=True)
         self._apply_instruction_visibility()
+        self._sync_plan_field_visibility()
         self._clear_instruction_feedback()
 
         self._editable_widgets = [
@@ -661,6 +676,7 @@ class ExperimentSetupView(QScrollArea):
             self.edit_lig_stock,
             self.cmb_lig_unit,
             self.chk_dmso,
+            self.chk_buffer_auto_fluorescence,
             self.edit_hi_conc,
         ]
         self._system_widgets = [
@@ -668,6 +684,9 @@ class ExperimentSetupView(QScrollArea):
             self.spin_excitation,
             self.cmb_mst,
         ]
+        self._system_controls_enabled = True
+        self.chk_auto.toggled.connect(self._on_excitation_auto_toggled)
+        self._sync_excitation_auto_mode()
 
         two_col.addLayout(left_col, 1)
         two_col.addLayout(right_col, 1)
@@ -708,6 +727,28 @@ class ExperimentSetupView(QScrollArea):
         elif combo.isEditable():
             combo.setEditText(text)
 
+    def _on_excitation_auto_toggled(self, checked: bool) -> None:
+        if checked:
+            self.spin_excitation.setValue(20)
+        self._sync_excitation_auto_mode()
+
+    def _sync_excitation_auto_mode(self) -> None:
+        if self.chk_auto.isChecked() and self.spin_excitation.value() != 20:
+            self.spin_excitation.blockSignals(True)
+            self.spin_excitation.setValue(20)
+            self.spin_excitation.blockSignals(False)
+        allow_manual_input = self._system_controls_enabled and (not self.chk_auto.isChecked())
+        self.spin_excitation.setEnabled(allow_manual_input)
+        self.spin_excitation.setStyleSheet(_spinbox_style(disabled=not allow_manual_input))
+
+    def _sync_plan_field_visibility(self) -> None:
+        show_buffer_auto_fluorescence = self._experiment_type_id in {"pre_test", "binding_test"}
+        for idx in range(self._buffer_auto_fluorescence_row.count()):
+            item = self._buffer_auto_fluorescence_row.itemAt(idx)
+            widget = item.widget() if item is not None else None
+            if widget is not None:
+                widget.setVisible(show_buffer_auto_fluorescence)
+
     def set_fields_enabled(self, widgets: list[QWidget], enabled: bool) -> None:
         for widget in widgets:
             widget.setEnabled(enabled)
@@ -718,7 +759,9 @@ class ExperimentSetupView(QScrollArea):
     def set_plan_lock_state(self, *, locked: bool, allow_plan_edit: bool) -> None:
         plan_enabled = (not locked) or allow_plan_edit
         self.set_fields_enabled(self._editable_widgets, plan_enabled)
-        self.set_fields_enabled(self._system_widgets, False if locked else True)
+        self._system_controls_enabled = False if locked else True
+        self.set_fields_enabled(self._system_widgets, self._system_controls_enabled)
+        self._sync_excitation_auto_mode()
         self.alter_btn.setEnabled(locked)
         self.go_to_instructions_btn.setEnabled(plan_enabled)
         self._refresh_instruction_field_styles()
@@ -760,6 +803,7 @@ class ExperimentSetupView(QScrollArea):
     def set_experiment_type(self, experiment_type_id: str) -> None:
         self._experiment_type_id = str(experiment_type_id or "pre_test")
         self._apply_instruction_visibility()
+        self._sync_plan_field_visibility()
         self.apply_instruction_validation(
             validate_instruction_inputs(self._experiment_type_id, self.get_params())
         )
@@ -784,9 +828,15 @@ class ExperimentSetupView(QScrollArea):
         self.edit_lig_stock.setText(str(payload.get("lig_stock", "") or ""))
         self._set_combo_text(self.cmb_lig_unit, payload.get("lig_stock_unit", ""))
         self.chk_dmso.setChecked(bool(payload.get("lig_in_dmso", False)))
+        self.chk_buffer_auto_fluorescence.setChecked(bool(payload.get("check_buffer_auto_fluorescence", False)))
         self.edit_hi_conc.setText(str(payload.get("hi_conc", "") or ""))
+        self.spin_excitation.blockSignals(True)
+        self.chk_auto.blockSignals(True)
         self.chk_auto.setChecked(bool(payload.get("excitation_auto", True)))
         self.spin_excitation.setValue(int(payload.get("excitation_pct", 10) or 10))
+        self.chk_auto.blockSignals(False)
+        self.spin_excitation.blockSignals(False)
+        self._sync_excitation_auto_mode()
         self._set_combo_text(self.cmb_mst, payload.get("mst_power", ""))
         self._excitation_color = str(payload.get("excitation", self._excitation_color) or self._excitation_color).upper()
         self._experiment_type_id = str(
@@ -796,6 +846,7 @@ class ExperimentSetupView(QScrollArea):
             or "pre_test"
         )
         self._apply_instruction_visibility()
+        self._sync_plan_field_visibility()
         self.apply_instruction_validation(
             validate_instruction_inputs(self._experiment_type_id, self.get_params())
         )
@@ -816,6 +867,7 @@ class ExperimentSetupView(QScrollArea):
             "lig_stock":         self.edit_lig_stock.text(),
             "lig_stock_unit":    self.cmb_lig_unit.currentText(),
             "lig_in_dmso":       self.chk_dmso.isChecked(),
+            "check_buffer_auto_fluorescence": self.chk_buffer_auto_fluorescence.isChecked(),
             "hi_conc":           self.edit_hi_conc.text(),
             "excitation":        self._excitation_color,
             "experiment_type":   str(get_experiment_type_config(self._experiment_type_id).get("name") or self._experiment_type_id),
