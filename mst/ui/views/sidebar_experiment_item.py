@@ -88,6 +88,11 @@ class ExperimentItem(QPushButton):
         number_layout.addWidget(order_lbl, 0, Qt.AlignCenter)
         number_layout.addStretch(1)
 
+        separator = QFrame()
+        self.separator = separator
+        separator.setObjectName("itemSeparator")
+        separator.setFixedWidth(1)
+
         content_wrap = QFrame()
         self.content_wrap = content_wrap
         content_wrap.setObjectName("contentWrap")
@@ -200,6 +205,7 @@ class ExperimentItem(QPushButton):
         content_layout.addWidget(bottom_frame)
 
         outer_layout.addWidget(number_frame, 0)
+        outer_layout.addWidget(separator, 0)
         outer_layout.addWidget(content_wrap, 1)
         root.addWidget(outer_frame)
 
@@ -217,7 +223,10 @@ class ExperimentItem(QPushButton):
             QFrame#numberFrame {{
                 background: transparent;
                 border: none;
-                border-right: 1px solid {PALETTE['border_active']};
+            }}
+            QFrame#itemSeparator {{
+                background: {PALETTE['border_active']};
+                border: none;
             }}
             QFrame#contentWrap {{
                 background: transparent;
@@ -259,16 +268,20 @@ class ExperimentItem(QPushButton):
 
     def _apply_selection_style(self, checked: bool) -> None:
         border_color = PALETTE['accent'] if checked else PALETTE['border_active']
-        top_bg = PALETTE['accent'] if checked else '#FFFFFF'
-        bottom_bg = PALETTE['accent'] if checked else PALETTE['bg_active']
-        type_color = '#FFFFFF' if checked else PALETTE['text_secondary']
-        name_color = '#FFFFFF' if checked else PALETTE['text_primary']
+        selected_bg = PALETTE['required_fill']
+        top_bg = selected_bg if checked else '#FFFFFF'
+        bottom_bg = selected_bg if checked else PALETTE['bg_active']
+        type_color = PALETTE['text_secondary']
+        name_color = PALETTE['text_primary']
 
         self.outer_frame.setStyleSheet(
             f"background: transparent; border: 1px solid {border_color}; border-radius: 16px;"
         )
         self.number_frame.setStyleSheet(
-            f"background: transparent; border: none; border-right: 1px solid {border_color};"
+            "background: transparent; border: none;"
+        )
+        self.separator.setStyleSheet(
+            f"background: {border_color}; border: none;"
         )
         self.content_wrap.setStyleSheet(
             "background: transparent; border: none;"
