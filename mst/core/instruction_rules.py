@@ -26,10 +26,17 @@ class InstructionValidationResult:
 
 
 @dataclass
+class InstructionSection:
+    title: str
+    body: list[str] = field(default_factory=list)
+    substeps: list[str] = field(default_factory=list)
+
+
+@dataclass
 class InstructionContent:
     title: str
     summary: list[tuple[str, str]] = field(default_factory=list)
-    steps: list[str] = field(default_factory=list)
+    sections: list[InstructionSection] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
 
@@ -146,12 +153,35 @@ def build_pretest_instructions(plan_data: PlanData) -> InstructionContent:
             ("Excitation", excitation),
             ("MST power", mst_power),
         ],
-        steps=[
-            f"Calculate the minimum required stock solution and buffer volumes using {target_stock} target stock and {buffer} as assay buffer.",
-            f"Prepare the intermediate sample from the configured target stock ({target_stock}). Use the assay concentration ({assay}) directly if no predilution is required.",
-            f"Prepare the assay sample in {buffer}, keeping ligand excluded for this pretest workflow.",
-            f"Dip {capillary} capillaries into the assay sample, place them into the device tray, and start the pretest measurement.",
-            "Review fluorescence quality, adsorption risk, and baseline signal stability before moving on to interaction experiments.",
+        sections=[
+            InstructionSection(
+                title="Minimum required stock solution and buffer volumes",
+                body=[
+                    f"Use {target_stock} target stock solution.",
+                    f"Use {buffer} as the assay buffer.",
+                ],
+            ),
+            InstructionSection(
+                title="Start by preparing the intermediate sample",
+                body=[
+                    f"Prepare the intermediate sample from the configured target stock ({target_stock}).",
+                    f"Use the assay concentration ({assay}) directly if no predilution is required.",
+                ],
+            ),
+            InstructionSection(
+                title="Prepare the assay sample",
+                body=[
+                    f"Prepare the final assay sample in {buffer}.",
+                    "Keep ligand excluded for this pretest workflow.",
+                ],
+            ),
+            InstructionSection(
+                title="Load capillaries and start the measurement",
+                body=[
+                    f"Dip {capillary} capillaries into the assay sample.",
+                    "Place the capillaries into the device tray and start the pretest measurement.",
+                ],
+            ),
         ],
         notes=[
             "Pretest is used to confirm that the labeled target behaves well before any ligand is introduced.",
@@ -185,12 +215,41 @@ def build_binding_test_instructions(plan_data: PlanData) -> InstructionContent:
             ("Excitation", excitation),
             ("MST power", mst_power),
         ],
-        steps=[
-            f"Calculate the minimum required target stock, ligand stock, and buffer volumes using {target_stock}, {ligand_stock}, and {buffer}.",
-            f"Prepare the intermediate samples for {target} and {ligand}. Set up a target-only control sample and a target-plus-ligand complex sample.",
-            f"If the ligand stock is prepared in DMSO, keep the solvent fraction matched between the control and complex samples.",
-            f"Prepare the final assay samples in {buffer}, then load them into {capillary} capillaries.",
-            f"Run the Binding Check measurement using excitation {excitation} and MST power {mst_power}, then compare target-only and complex responses.",
+        sections=[
+            InstructionSection(
+                title="Minimum required stock solution and buffer volumes",
+                body=[
+                    f"Use {target_stock} target stock solution.",
+                    f"Use {ligand_stock} ligand stock solution.",
+                    f"Use {buffer} as the assay buffer.",
+                ],
+            ),
+            InstructionSection(
+                title="Start by preparing the following intermediate samples",
+                body=[
+                    f"Prepare the intermediate samples for {target} and {ligand}.",
+                ],
+                substeps=[
+                    "Set up a target-only control sample.",
+                    "Set up a target-plus-ligand complex sample.",
+                    "If the ligand stock is prepared in DMSO, keep the solvent fraction matched between the two samples.",
+                ],
+            ),
+            InstructionSection(
+                title="Prepare the following assay samples",
+                body=[
+                    f"Prepare the final assay samples in {buffer}.",
+                    "Keep target-only and complex conditions directly comparable.",
+                ],
+            ),
+            InstructionSection(
+                title="Load capillaries and start the measurement",
+                body=[
+                    f"Load the samples into {capillary} capillaries.",
+                    f"Run the Binding Check measurement using excitation {excitation} and MST power {mst_power}.",
+                    "Compare target-only and complex responses to verify whether a measurable interaction signal is present.",
+                ],
+            ),
         ],
         notes=[
             "Binding Check is a qualitative experiment used to verify whether a measurable interaction signal is present.",
@@ -228,13 +287,49 @@ def build_binding_affinity_instructions(plan_data: PlanData) -> InstructionConte
             ("Excitation", excitation),
             ("MST power", mst_power),
         ],
-        steps=[
-            f"Calculate the minimum required target stock, ligand stock, and buffer volumes using {target_stock}, {ligand_stock}, and a highest ligand concentration of {high_conc}.",
-            f"Prepare the intermediate samples for {target} and {ligand}. If needed, predilute the target to a suitable working concentration before mixing.",
-            f"Prepare a serial dilution of the ligand starting from {high_conc}, using matched ligand buffer for the full dilution series.",
-            f"Add the target sample to each ligand dilution point, mix thoroughly, and keep the final assay conditions consistent across the full series.",
-            f"Load all samples into {capillary} capillaries and run the Binding Affinity measurement using excitation {excitation} and MST power {mst_power}.",
-            "Fit the resulting binding curve and review whether the concentration range properly spans the transition region.",
+        sections=[
+            InstructionSection(
+                title="Minimum required stock solution and buffer volumes",
+                body=[
+                    f"Use {target_stock} target stock solution.",
+                    f"Use {ligand_stock} ligand stock solution.",
+                    f"Start the dilution series from a highest ligand concentration of {high_conc}.",
+                    f"Use {buffer} as the assay buffer.",
+                ],
+            ),
+            InstructionSection(
+                title="Start by preparing the following intermediate samples",
+                body=[
+                    f"Prepare the intermediate samples for {target} and {ligand}.",
+                ],
+                substeps=[
+                    "If required, predilute the target to a suitable working concentration.",
+                    "Prepare matched ligand buffer for the full dilution series.",
+                    "Keep solvent conditions constant if the ligand stock contains DMSO.",
+                ],
+            ),
+            InstructionSection(
+                title="Prepare a serial dilution of the ligand",
+                body=[
+                    f"Prepare a serial dilution of the ligand starting from {high_conc}.",
+                    "Use the same ligand buffer throughout the full dilution series.",
+                ],
+            ),
+            InstructionSection(
+                title="Add target to all dilution points and mix thoroughly",
+                body=[
+                    "Keep the final target concentration constant across all titration points.",
+                    "Mix thoroughly and keep the final assay conditions consistent across the full series.",
+                ],
+            ),
+            InstructionSection(
+                title="Load capillaries and run the Binding Affinity measurement",
+                body=[
+                    f"Load all samples into {capillary} capillaries.",
+                    f"Run the Binding Affinity measurement using excitation {excitation} and MST power {mst_power}.",
+                    "Fit the resulting binding curve and review whether the concentration range properly spans the transition region.",
+                ],
+            ),
         ],
         notes=[
             "Binding Affinity is intended for quantitative analysis of the interaction and should be run only after a convincing binding signal is observed.",

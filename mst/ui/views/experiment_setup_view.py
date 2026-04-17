@@ -114,16 +114,13 @@ def _combo_style(error: bool = False) -> str:
     """
 
 
-def _spinbox_style(disabled: bool = False) -> str:
-    background = PALETTE['bg_hover'] if disabled else PALETTE['bg_card']
-    border = PALETTE['border']
-    text_color = PALETTE['text_muted'] if disabled else PALETTE['text_primary']
+def _spinbox_style() -> str:
     return f"""
         QSpinBox {{
-            background: {background};
-            border: 1px solid {border};
+            background: {PALETTE['bg_card']};
+            border: 1px solid {PALETTE['border']};
             border-radius: 6px;
-            color: {text_color};
+            color: {PALETTE['text_primary']};
             font-size: 13px;
             padding: 4px 30px 4px 8px;
             min-height: 28px;
@@ -186,7 +183,7 @@ def _check_style() -> str:
 
 
 def _help_btn() -> QPushButton:
-    btn = QPushButton("?")
+    btn = QPushButton("??")
     btn.setFixedSize(40, 24)
     btn.setCursor(Qt.PointingHandCursor)
     btn.setStyleSheet(f"""
@@ -195,7 +192,7 @@ def _help_btn() -> QPushButton:
             border: 1px solid {PALETTE['border']};
             border-radius: 5px;
             color: {PALETTE['text_muted']};
-            font-size: 13px;
+            font-size: 10px;
             font-weight: 700;
             padding: 0 6px;
         }}
@@ -671,9 +668,6 @@ class ExperimentSetupView(QScrollArea):
             self.spin_excitation,
             self.cmb_mst,
         ]
-        self._system_controls_enabled = True
-        self.chk_auto.toggled.connect(self._on_excitation_auto_toggled)
-        self._sync_excitation_auto_mode()
 
         two_col.addLayout(left_col, 1)
         two_col.addLayout(right_col, 1)
@@ -714,20 +708,6 @@ class ExperimentSetupView(QScrollArea):
         elif combo.isEditable():
             combo.setEditText(text)
 
-    def _on_excitation_auto_toggled(self, checked: bool) -> None:
-        if checked:
-            self.spin_excitation.setValue(20)
-        self._sync_excitation_auto_mode()
-
-    def _sync_excitation_auto_mode(self) -> None:
-        if self.chk_auto.isChecked() and self.spin_excitation.value() != 20:
-            self.spin_excitation.blockSignals(True)
-            self.spin_excitation.setValue(20)
-            self.spin_excitation.blockSignals(False)
-        allow_manual_input = self._system_controls_enabled and (not self.chk_auto.isChecked())
-        self.spin_excitation.setEnabled(allow_manual_input)
-        self.spin_excitation.setStyleSheet(_spinbox_style(disabled=not allow_manual_input))
-
     def set_fields_enabled(self, widgets: list[QWidget], enabled: bool) -> None:
         for widget in widgets:
             widget.setEnabled(enabled)
@@ -738,9 +718,7 @@ class ExperimentSetupView(QScrollArea):
     def set_plan_lock_state(self, *, locked: bool, allow_plan_edit: bool) -> None:
         plan_enabled = (not locked) or allow_plan_edit
         self.set_fields_enabled(self._editable_widgets, plan_enabled)
-        self._system_controls_enabled = False if locked else True
-        self.set_fields_enabled(self._system_widgets, self._system_controls_enabled)
-        self._sync_excitation_auto_mode()
+        self.set_fields_enabled(self._system_widgets, False if locked else True)
         self.alter_btn.setEnabled(locked)
         self.go_to_instructions_btn.setEnabled(plan_enabled)
         self._refresh_instruction_field_styles()
@@ -807,13 +785,8 @@ class ExperimentSetupView(QScrollArea):
         self._set_combo_text(self.cmb_lig_unit, payload.get("lig_stock_unit", ""))
         self.chk_dmso.setChecked(bool(payload.get("lig_in_dmso", False)))
         self.edit_hi_conc.setText(str(payload.get("hi_conc", "") or ""))
-        self.spin_excitation.blockSignals(True)
-        self.chk_auto.blockSignals(True)
         self.chk_auto.setChecked(bool(payload.get("excitation_auto", True)))
         self.spin_excitation.setValue(int(payload.get("excitation_pct", 10) or 10))
-        self.chk_auto.blockSignals(False)
-        self.spin_excitation.blockSignals(False)
-        self._sync_excitation_auto_mode()
         self._set_combo_text(self.cmb_mst, payload.get("mst_power", ""))
         self._excitation_color = str(payload.get("excitation", self._excitation_color) or self._excitation_color).upper()
         self._experiment_type_id = str(

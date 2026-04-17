@@ -253,38 +253,27 @@ class InstructionsPage(QScrollArea):
         )
         self._layout.addWidget(title)
 
-        if content.summary:
-            summary_card = QFrame()
-            summary_card.setStyleSheet(
-                f"background: {PALETTE['bg_card']};"
-                f"border: 1px solid {PALETTE['border']};"
-                "border-radius: 10px;"
-            )
-            summary_layout = QGridLayout(summary_card)
-            summary_layout.setContentsMargins(18, 16, 18, 16)
-            summary_layout.setHorizontalSpacing(24)
-            summary_layout.setVerticalSpacing(10)
-            for idx, (label, value) in enumerate(content.summary):
-                key_lbl = QLabel(label)
-                key_lbl.setStyleSheet(f"color: {PALETTE['text_muted']}; font-size: 12px; font-weight: 700;")
-                val_lbl = QLabel(value)
-                val_lbl.setStyleSheet(f"color: {PALETTE['text_primary']}; font-size: 13px; font-weight: 600;")
-                row = idx // 2
-                col = (idx % 2) * 2
-                summary_layout.addWidget(key_lbl, row, col)
-                summary_layout.addWidget(val_lbl, row, col + 1)
-            self._layout.addWidget(summary_card)
+        intro = QLabel(
+            "Below are detailed instructions on how to prepare the samples necessary for your experiment. "
+            "For general information on binding affinity experiments, refer to the guidance on the right."
+        )
+        intro.setWordWrap(True)
+        intro.setStyleSheet(f"color: {PALETTE['text_secondary']}; font-size: 13px;")
+        self._layout.addWidget(intro)
 
-        for idx, step in enumerate(content.steps, 1):
+        for idx, section in enumerate(content.sections, 1):
             frame = QFrame()
             frame.setStyleSheet(
                 f"background: {PALETTE['bg_card']};"
                 f"border: 1px solid {PALETTE['border']};"
                 "border-radius: 10px;"
             )
-            hl = QHBoxLayout(frame)
-            hl.setContentsMargins(20, 16, 20, 16)
-            hl.setSpacing(16)
+            section_layout = QVBoxLayout(frame)
+            section_layout.setContentsMargins(20, 16, 20, 16)
+            section_layout.setSpacing(10)
+
+            header_row = QHBoxLayout()
+            header_row.setSpacing(12)
 
             num = QLabel(str(idx))
             num.setFixedSize(28, 28)
@@ -294,12 +283,32 @@ class InstructionsPage(QScrollArea):
                 " color: #FFFFFF; font-size: 12px; font-weight: 700;"
             )
 
-            text = QLabel(step)
-            text.setWordWrap(True)
-            text.setStyleSheet(f"color: {PALETTE['text_secondary']}; font-size: 13px;")
+            section_title = QLabel(section.title)
+            section_title.setWordWrap(True)
+            section_title.setStyleSheet(f"color: {PALETTE['text_primary']}; font-size: 15px; font-weight: 700;")
 
-            hl.addWidget(num, 0, Qt.AlignTop)
-            hl.addWidget(text, 1)
+            header_row.addWidget(num, 0, Qt.AlignTop)
+            header_row.addWidget(section_title, 1)
+            section_layout.addLayout(header_row)
+
+            for paragraph in section.body:
+                body_lbl = QLabel(paragraph)
+                body_lbl.setWordWrap(True)
+                body_lbl.setStyleSheet(f"color: {PALETTE['text_secondary']}; font-size: 13px;")
+                section_layout.addWidget(body_lbl)
+
+            if section.substeps:
+                substeps_layout = QVBoxLayout()
+                substeps_layout.setContentsMargins(40, 2, 0, 0)
+                substeps_layout.setSpacing(6)
+                for sub_idx, substep in enumerate(section.substeps):
+                    bullet = chr(ord('a') + sub_idx)
+                    sub_lbl = QLabel(f"{bullet}. {substep}")
+                    sub_lbl.setWordWrap(True)
+                    sub_lbl.setStyleSheet(f"color: {PALETTE['text_secondary']}; font-size: 13px;")
+                    substeps_layout.addWidget(sub_lbl)
+                section_layout.addLayout(substeps_layout)
+
             self._layout.addWidget(frame)
 
         if content.notes:

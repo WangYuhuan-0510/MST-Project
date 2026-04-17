@@ -59,24 +59,21 @@ class ExperimentItem(QPushButton):
         root.setSpacing(0)
 
         outer_frame = QFrame()
-        self.outer_frame = outer_frame
         outer_frame.setObjectName("outerFrame")
         outer_layout = QHBoxLayout(outer_frame)
         outer_layout.setContentsMargins(0, 0, 0, 0)
         outer_layout.setSpacing(0)
 
         number_frame = QFrame()
-        self.number_frame = number_frame
         number_frame.setObjectName("numberFrame")
         number_frame.setFixedWidth(30)
         number_layout = QVBoxLayout(number_frame)
-        number_layout.setContentsMargins(0, 0, 6, 0)
+        number_layout.setContentsMargins(0, 0, 0, 0)
         number_layout.setSpacing(0)
         number_layout.addStretch(1)
 
         order_lbl = QLabel(str(self.order_index))
         self.order_lbl = order_lbl
-        order_lbl.setObjectName("orderLabel")
         order_lbl.setAlignment(Qt.AlignCenter)
         order_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
         order_lbl.setStyleSheet(
@@ -89,14 +86,12 @@ class ExperimentItem(QPushButton):
         number_layout.addStretch(1)
 
         content_wrap = QFrame()
-        self.content_wrap = content_wrap
         content_wrap.setObjectName("contentWrap")
         content_layout = QVBoxLayout(content_wrap)
-        content_layout.setContentsMargins(0, 1, 1, 1)
+        content_layout.setContentsMargins(0, 0, 0, 0)
         content_layout.setSpacing(0)
 
         top_frame = QFrame()
-        self.top_frame = top_frame
         top_frame.setObjectName("topFrame")
         top_row = QHBoxLayout(top_frame)
         top_row.setContentsMargins(8, 6, 6, 6)
@@ -117,9 +112,8 @@ class ExperimentItem(QPushButton):
             )
 
         type_lbl = QLabel(self.experiment_type_name)
-        self.type_lbl = type_lbl
-        type_lbl.setObjectName("typeLabel")
         type_lbl.setAttribute(Qt.WA_TransparentForMouseEvents)
+        type_lbl.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         type_lbl.setMinimumWidth(0)
         type_lbl.setWordWrap(False)
         type_lbl.setStyleSheet(
@@ -128,6 +122,10 @@ class ExperimentItem(QPushButton):
             "font-size: 14px;"
             "font-weight: 500;"
         )
+
+        top_spacer = QFrame()
+        top_spacer.setStyleSheet("background: transparent; border: none;")
+        top_spacer.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
 
         dirty_mark = QLabel("*")
         self.dirty_mark = dirty_mark
@@ -160,19 +158,16 @@ class ExperimentItem(QPushButton):
         top_row.addWidget(self.delete_btn, 0, Qt.AlignVCenter)
 
         divider = QFrame()
-        self.divider = divider
         divider.setObjectName("midDivider")
         divider.setFixedHeight(1)
 
         bottom_frame = QFrame()
-        self.bottom_frame = bottom_frame
         bottom_frame.setObjectName("bottomFrame")
         bottom_row = QHBoxLayout(bottom_frame)
         bottom_row.setContentsMargins(12, 4, 8, 4)
         bottom_row.setSpacing(8)
 
         self.name_lbl = QLabel(self.experiment_name)
-        self.name_lbl.setObjectName("nameLabel")
         self.name_lbl.setStyleSheet(
             f"color: {PALETTE['text_primary']};"
             "background: transparent;"
@@ -222,6 +217,53 @@ class ExperimentItem(QPushButton):
             QFrame#contentWrap {{
                 background: transparent;
                 border: none;
+                border-top-right-radius: 16px;
+                border-bottom-right-radius: 16px;
+            }}
+            QFrame#topFrame {{
+                background: #FFFFFF;
+                border: none;
+                border-top-right-radius: 16px;
+            }}
+            QFrame#midDivider {{
+                background: {PALETTE['border_active']};
+                border: none;
+            }}
+            QFrame#bottomFrame {{
+                background: {PALETTE['bg_active']};
+                border: none;
+                border-bottom-right-radius: 16px;
+            }}
+            QPushButton:hover QFrame#outerFrame {{
+                border-color: {PALETTE['accent']};
+            }}
+            QPushButton:hover QFrame#numberFrame {{
+                border-right: 1px solid {PALETTE['accent']};
+            }}
+            QPushButton:hover QFrame#midDivider {{
+                background: {PALETTE['accent']};
+            }}
+            QPushButton:hover QFrame#topFrame {{
+                background: #FFFFFF;
+            }}
+            QPushButton:hover QFrame#bottomFrame {{
+                background: {PALETTE['bg_active']};
+            }}
+            QPushButton:checked QFrame#outerFrame {{
+                border-color: {PALETTE['accent']};
+            }}
+            QPushButton:checked QFrame#numberFrame {{
+                border-right: 1px solid {PALETTE['accent']};
+                background: transparent;
+            }}
+            QPushButton:checked QFrame#midDivider {{
+                background: {PALETTE['accent']};
+            }}
+            QPushButton:checked QFrame#topFrame {{
+                background: {PALETTE['bg_active']};
+            }}
+            QPushButton:checked QFrame#bottomFrame {{
+                background: #FFFFFF;
             }}
             QLabel {{
                 background: transparent;
@@ -255,41 +297,6 @@ class ExperimentItem(QPushButton):
                 background: {PALETTE['bg_active']};
             }}
         """)
-        self._apply_selection_style(self.isChecked())
-
-    def _apply_selection_style(self, checked: bool) -> None:
-        border_color = PALETTE['accent'] if checked else PALETTE['border_active']
-        top_bg = PALETTE['accent'] if checked else '#FFFFFF'
-        bottom_bg = PALETTE['accent'] if checked else PALETTE['bg_active']
-        type_color = '#FFFFFF' if checked else PALETTE['text_secondary']
-        name_color = '#FFFFFF' if checked else PALETTE['text_primary']
-
-        self.outer_frame.setStyleSheet(
-            f"background: transparent; border: 1px solid {border_color}; border-radius: 16px;"
-        )
-        self.number_frame.setStyleSheet(
-            f"background: transparent; border: none; border-right: 1px solid {border_color};"
-        )
-        self.content_wrap.setStyleSheet(
-            "background: transparent; border: none;"
-        )
-        self.top_frame.setStyleSheet(
-            f"background: {top_bg}; border: none; border-top-left-radius: 0px; border-top-right-radius: 15px; border-bottom-left-radius: 0px; border-bottom-right-radius: 0px;"
-        )
-        self.divider.setStyleSheet(f"background: {border_color}; border: none;")
-        self.bottom_frame.setStyleSheet(
-            f"background: {bottom_bg}; border: none; border-top-left-radius: 0px; border-top-right-radius: 0px; border-bottom-left-radius: 0px; border-bottom-right-radius: 15px;"
-        )
-        self.type_lbl.setStyleSheet(
-            f"color: {type_color}; background: transparent; font-size: 14px; font-weight: 500;"
-        )
-        self.name_lbl.setStyleSheet(
-            f"color: {name_color}; background: transparent; font-size: 13px; font-style: italic; font-weight: 500;"
-        )
-
-    def setChecked(self, checked: bool) -> None:
-        super().setChecked(checked)
-        self._apply_selection_style(bool(checked))
 
     def _emit_rename_requested(self) -> None:
         if self.experiment_id:
@@ -312,7 +319,6 @@ class ExperimentItem(QPushButton):
         }
 
         self.order_lbl.setText(str(self.order_index))
-        self.type_lbl.setText(self.experiment_type_name)
         self.name_lbl.setText(self.experiment_name)
         self.dirty_mark.setVisible(self.is_dirty)
         self.status_dot.setStyleSheet(
